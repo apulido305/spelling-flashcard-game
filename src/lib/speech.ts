@@ -12,10 +12,21 @@ if (isSpeechSupported()) {
   window.speechSynthesis.onvoiceschanged = refreshVoices;
 }
 
-function scoreVoice(voice: SpeechSynthesisVoice): number {
+function voiceHaystack(voice: SpeechSynthesisVoice): string {
   // Voice quality tier isn't always in .name (e.g. iOS keeps "Samantha" for every
   // tier) — the tier usually only shows up in .voiceURI, so check both.
-  const haystack = `${voice.name} ${voice.voiceURI}`.toLowerCase();
+  return `${voice.name} ${voice.voiceURI}`.toLowerCase();
+}
+
+// iOS Premium/Enhanced voices distort badly ("croaking") when spoken at anything
+// other than their native rate — only the older standard/compact voices tolerate
+// being slowed down cleanly.
+function isHighQualityVoice(voice: SpeechSynthesisVoice): boolean {
+  return /premium|enhanced|natural|neural/.test(voiceHaystack(voice));
+}
+
+function scoreVoice(voice: SpeechSynthesisVoice): number {
+  const haystack = voiceHaystack(voice);
   let score = 0;
   if (/premium/.test(haystack)) score += 12;
   if (/enhanced|natural|neural/.test(haystack)) score += 10;
@@ -42,10 +53,14 @@ export function speakWord(word: string) {
 
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(word);
-  utterance.rate = 0.85;
 
   const voice = pickBestVoice();
-  if (voice) utterance.voice = voice;
+  if (voice) {
+    utterance.voice = voice;
+    utterance.rate = isHighQualityVoice(voice) ? 1 : 0.85;
+  } else {
+    utterance.rate = 0.85;
+  }
 
   window.speechSynthesis.speak(utterance);
 }
