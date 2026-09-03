@@ -28,8 +28,12 @@ function isHighQualityVoice(voice: SpeechSynthesisVoice): boolean {
 function scoreVoice(voice: SpeechSynthesisVoice): number {
   const haystack = voiceHaystack(voice);
   let score = 0;
-  if (/premium/.test(haystack)) score += 12;
-  if (/enhanced|natural|neural/.test(haystack)) score += 10;
+  // "Enhanced" is the more mature, better-supported tier through the Web Speech
+  // API bridge on iOS/Safari — "Premium" (newer, on-device neural) has known
+  // playback-corruption bugs through that same bridge for some voices/devices,
+  // so it's ranked below Enhanced rather than above it.
+  if (/enhanced/.test(haystack)) score += 12;
+  if (/premium|natural|neural/.test(haystack)) score += 10;
   if (/compact/.test(haystack)) score -= 5; // iOS's lowest-quality tier
   if (/eloquence/.test(haystack)) score -= 10; // notably robotic legacy engine
   if (voice.lang === 'en-US') score += 3;
@@ -50,17 +54,29 @@ function pickBestVoice(): SpeechSynthesisVoice | undefined {
 
 export function speakWord(word: string) {
   if (!isSpeechSupported()) return;
+  const synth = window.speechSynthesis;
 
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(word);
+  function doSpeak() {
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.pitch = 1;
 
-  const voice = pickBestVoice();
-  if (voice) {
-    utterance.voice = voice;
-    utterance.rate = isHighQualityVoice(voice) ? 1 : 0.85;
-  } else {
-    utterance.rate = 0.85;
+    const voice = pickBestVoice();
+    if (voice) {
+      utterance.voice = voice;
+      utterance.rate = isHighQualityVoice(voice) ? 1 : 0.85;
+    } else {
+      utterance.rate = 0.85;
+    }
+
+    synth.speak(utterance);
   }
 
-  window.speechSynthesis.speak(utterance);
+  // Calling speak() right after cancel() can corrupt playback on iOS Safari
+  // (audio comes out distorted/garbled) — give the engine a beat to reset.
+  if (synth.speaking || synth.pending) {
+    synth.cancel();
+    setTimeout(doSpeak, 50);
+  } else {
+    doSpeak();
+  }
 }
