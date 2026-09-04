@@ -1,4 +1,5 @@
 import { loadJSON, saveJSON } from './storage';
+import { syllabify } from './phonetics';
 
 export function isSpeechSupported(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window;
@@ -156,4 +157,10 @@ export function spellOutWord(word: string) {
   if (!isSpeechSupported()) return;
   const letters = word.split('').join(', ');
   speakText(letters, 0.7);
+}
+
+export function soundOutWord(word: string) {
+  if (!isSpeechSupported()) return;
+  const chunks = syllabify(word).join(', ');
+  speakText(chunks, 0.75);
 }
