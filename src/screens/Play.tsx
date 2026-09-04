@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react';
 import type { GameState } from '../types';
 import { HINT_AFTER_MISSES, hintText, requeue, scoreForAnswer } from '../lib/gameLogic';
 import {
+  getAvailableVoices,
   getLastSpeechDebugInfo,
+  getPreferredVoiceURI,
   isSpeechSupported,
+  setPreferredVoiceURI,
   speakWord,
   spellOutWord,
   type SpeechDebugInfo,
@@ -38,6 +41,8 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
   const [busy, setBusy] = useState(false);
 
   const [debugInfo, setDebugInfo] = useState<SpeechDebugInfo | null>(null);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState<string | null>(null);
 
   const currentWord = queue[0];
   const speechSupported = isSpeechSupported();
@@ -54,6 +59,22 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
     const interval = setInterval(() => setDebugInfo(getLastSpeechDebugInfo()), 300);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!speechSupported) return;
+    setSelectedVoiceURI(getPreferredVoiceURI());
+    const refresh = () => setVoices(getAvailableVoices());
+    refresh();
+    window.speechSynthesis.addEventListener('voiceschanged', refresh);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', refresh);
+  }, []);
+
+  function handleVoiceChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const uri = e.target.value || null;
+    setSelectedVoiceURI(uri);
+    setPreferredVoiceURI(uri);
+    if (currentWord) speakWord(currentWord);
+  }
 
   function handleSoundItOut() {
     if (!currentWord) return;
@@ -153,6 +174,19 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
               🔤 Sound it out
             </button>
           </div>
+          {speechSupported && voices.length > 0 && (
+            <label className="voice-picker">
+              Voice:
+              <select value={selectedVoiceURI ?? ''} onChange={handleVoiceChange}>
+                <option value="">Auto (recommended)</option>
+                {voices.map((v) => (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {!speechSupported && (
             <p className="error-text">
               Audio isn't supported in this browser — try Chrome, Edge, or Safari.

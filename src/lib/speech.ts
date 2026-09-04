@@ -1,3 +1,5 @@
+import { loadJSON, saveJSON } from './storage';
+
 export function isSpeechSupported(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window;
 }
@@ -16,6 +18,23 @@ function voiceHaystack(voice: SpeechSynthesisVoice): string {
   // Voice quality tier isn't always in .name (e.g. iOS keeps "Samantha" for every
   // tier) — the tier usually only shows up in .voiceURI, so check both.
   return `${voice.name} ${voice.voiceURI}`.toLowerCase();
+}
+
+// Apple's built-in "novelty" voices (Settings > Accessibility > Spoken Content
+// > Voices > Novelty) are deliberately distorted for comedic effect (a goat
+// bleat, a robot, an organ...). On devices with a large voice list installed,
+// our scoring could tie with or lose to one of these — exclude them outright
+// so a spelling app never accidentally reads words in a bleating goat voice.
+const NOVELTY_VOICE_NAMES = [
+  'albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos',
+  'wobble', 'deranged', 'good news', 'hysterical', 'pipe organ', 'trinoids',
+  'whisper', 'zarvox', 'jester', 'organ', 'superstar', 'kathy', 'ralph',
+  'fred', 'junior', 'princess',
+];
+
+function isNoveltyVoice(voice: SpeechSynthesisVoice): boolean {
+  const name = voice.name.toLowerCase();
+  return NOVELTY_VOICE_NAMES.some((novelty) => name === novelty || name.startsWith(`${novelty} `));
 }
 
 // iOS Premium/Enhanced voices distort badly ("croaking") when spoken at anything
@@ -38,6 +57,26 @@ function scoreVoice(voice: SpeechSynthesisVoice): number {
   return score;
 }
 
+const VOICE_PREFERENCE_KEY = 'voicePreference';
+let preferredVoiceURI: string | null = loadJSON<string | null>(VOICE_PREFERENCE_KEY, null);
+
+export function getPreferredVoiceURI(): string | null {
+  return preferredVoiceURI;
+}
+
+export function setPreferredVoiceURI(uri: string | null) {
+  preferredVoiceURI = uri;
+  saveJSON(VOICE_PREFERENCE_KEY, uri);
+}
+
+// Exposed so a settings UI can list real choices instead of relying on the
+// auto-picked "best" voice — the auto-pick is only ever a fallback default.
+export function getAvailableVoices(): SpeechSynthesisVoice[] {
+  const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
+  const englishVoices = voices.filter((v) => v.lang.startsWith('en') && !isNoveltyVoice(v));
+  return (englishVoices.length ? englishVoices : voices).sort((a, b) => scoreVoice(b) - scoreVoice(a));
+}
+
 function pickBestVoice(): SpeechSynthesisVoice | undefined {
   // Synchronous by design: speak() must stay in the same call stack as the
   // triggering user gesture (button tap) or iOS Safari can degrade playback
@@ -45,10 +84,16 @@ function pickBestVoice(): SpeechSynthesisVoice | undefined {
   const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
   if (voices.length === 0) return undefined;
 
-  const englishVoices = voices.filter((v) => v.lang.startsWith('en'));
-  const pool = englishVoices.length ? englishVoices : voices;
+  if (preferredVoiceURI) {
+    const chosen = voices.find((v) => v.voiceURI === preferredVoiceURI);
+    if (chosen) return chosen;
+  }
 
-  return [...pool].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0];
+  const englishVoices = voices.filter((v) => v.lang.startsWith('en') && !isNoveltyVoice(v));
+  const pool = englishVoices.length ? englishVoices : voices.filter((v) => !isNoveltyVoice(v));
+  const finalPool = pool.length ? pool : voices;
+
+  return [...finalPool].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0];
 }
 
 export interface SpeechDebugInfo {
