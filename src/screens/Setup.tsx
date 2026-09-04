@@ -1,3 +1,5 @@
+import { DEFAULT_WORDS } from '../lib/defaultWords';
+
 interface SetupProps {
   text: string;
   onTextChange: (text: string) => void;
@@ -13,7 +15,18 @@ export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) 
   return (
     <>
       <h1>Spelling Practice</h1>
-      <p className="subtitle">Paste this week's spelling words, one per line.</p>
+
+      <div className="quick-start">
+        <p className="subtitle">Ready to practice this week's words?</p>
+        <button
+          className="play-now-button"
+          onClick={() => onWordsReady(DEFAULT_WORDS)}
+        >
+          ▶ Play
+        </button>
+      </div>
+
+      <p className="subtitle">Or paste a new list of words, one per line:</p>
       <textarea
         value={text}
         onChange={(e) => onTextChange(e.target.value)}
