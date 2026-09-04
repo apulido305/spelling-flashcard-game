@@ -3,54 +3,13 @@ export function isSpeechSupported(): boolean {
 }
 
 let cachedVoices: SpeechSynthesisVoice[] = [];
-let voicesReadyPromise: Promise<SpeechSynthesisVoice[]> | null = null;
 
 if (isSpeechSupported()) {
-  cachedVoices = window.speechSynthesis.getVoices();
-  window.speechSynthesis.onvoiceschanged = () => {
+  const refreshVoices = () => {
     cachedVoices = window.speechSynthesis.getVoices();
   };
-}
-
-// getVoices() is frequently empty on the very first call after a fresh page
-// load (notably iOS Safari) — the list only populates once 'voiceschanged'
-// fires. Speaking before that resolves means pickBestVoice() can't identify
-// the voice, so the code can't tell whether it's safe to slow the rate down,
-// which is exactly what caused the iOS distortion bug previously. Wait for a
-// real voice list (bounded by a timeout so we never hang forever) before the
-// very first utterance.
-function waitForVoices(): Promise<SpeechSynthesisVoice[]> {
-  if (!isSpeechSupported()) return Promise.resolve([]);
-  if (cachedVoices.length > 0) return Promise.resolve(cachedVoices);
-
-  if (!voicesReadyPromise) {
-    voicesReadyPromise = new Promise((resolve) => {
-      const synth = window.speechSynthesis;
-      const immediate = synth.getVoices();
-      if (immediate.length > 0) {
-        cachedVoices = immediate;
-        resolve(immediate);
-        return;
-      }
-
-      const onVoicesChanged = () => {
-        const voices = synth.getVoices();
-        if (voices.length > 0) {
-          cachedVoices = voices;
-          synth.removeEventListener('voiceschanged', onVoicesChanged);
-          clearTimeout(timeoutId);
-          resolve(voices);
-        }
-      };
-      synth.addEventListener('voiceschanged', onVoicesChanged);
-
-      const timeoutId = setTimeout(() => {
-        synth.removeEventListener('voiceschanged', onVoicesChanged);
-        resolve(synth.getVoices());
-      }, 1000);
-    });
-  }
-  return voicesReadyPromise;
+  refreshVoices();
+  window.speechSynthesis.onvoiceschanged = refreshVoices;
 }
 
 function voiceHaystack(voice: SpeechSynthesisVoice): string {
@@ -69,10 +28,6 @@ function isHighQualityVoice(voice: SpeechSynthesisVoice): boolean {
 function scoreVoice(voice: SpeechSynthesisVoice): number {
   const haystack = voiceHaystack(voice);
   let score = 0;
-  // "Enhanced" is the more mature, better-supported tier through the Web Speech
-  // API bridge on iOS/Safari — "Premium" (newer, on-device neural) has known
-  // playback-corruption bugs through that same bridge for some voices/devices,
-  // so it's ranked below Enhanced rather than above it.
   if (/enhanced/.test(haystack)) score += 12;
   if (/premium|natural|neural/.test(haystack)) score += 10;
   if (/compact/.test(haystack)) score -= 5; // iOS's lowest-quality tier
@@ -83,7 +38,11 @@ function scoreVoice(voice: SpeechSynthesisVoice): number {
   return score;
 }
 
-function pickBestVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
+function pickBestVoice(): SpeechSynthesisVoice | undefined {
+  // Synchronous by design: speak() must stay in the same call stack as the
+  // triggering user gesture (button tap) or iOS Safari can degrade playback
+  // quality for higher-tier voices. Never await anything before speaking.
+  const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
   if (voices.length === 0) return undefined;
 
   const englishVoices = voices.filter((v) => v.lang.startsWith('en'));
@@ -92,23 +51,43 @@ function pickBestVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | u
   return [...pool].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0];
 }
 
-async function speakText(text: string, standardVoiceRate: number) {
+export interface SpeechDebugInfo {
+  text: string;
+  voiceName: string | null;
+  voiceURI: string | null;
+  isHighQuality: boolean | null;
+  rate: number;
+  voiceCount: number;
+  calledAt: string;
+}
+
+let lastDebugInfo: SpeechDebugInfo | null = null;
+
+export function getLastSpeechDebugInfo(): SpeechDebugInfo | null {
+  return lastDebugInfo;
+}
+
+function speakText(text: string, standardVoiceRate: number) {
   const synth = window.speechSynthesis;
-  const voices = await waitForVoices();
 
   function doSpeak() {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.pitch = 1;
 
-    const voice = pickBestVoice(voices);
-    if (voice) {
-      utterance.voice = voice;
-      // High-quality voices distort at non-native rates (see isHighQualityVoice) —
-      // only slow down the older standard/compact voices, which tolerate it fine.
-      utterance.rate = isHighQualityVoice(voice) ? 1 : standardVoiceRate;
-    } else {
-      utterance.rate = standardVoiceRate;
-    }
+    const voice = pickBestVoice();
+    const rate = voice ? (isHighQualityVoice(voice) ? 1 : standardVoiceRate) : standardVoiceRate;
+    if (voice) utterance.voice = voice;
+    utterance.rate = rate;
+
+    lastDebugInfo = {
+      text,
+      voiceName: voice?.name ?? null,
+      voiceURI: voice?.voiceURI ?? null,
+      isHighQuality: voice ? isHighQualityVoice(voice) : null,
+      rate,
+      voiceCount: (cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices()).length,
+      calledAt: new Date().toLocaleTimeString(),
+    };
 
     synth.speak(utterance);
   }
@@ -125,11 +104,11 @@ async function speakText(text: string, standardVoiceRate: number) {
 
 export function speakWord(word: string) {
   if (!isSpeechSupported()) return;
-  void speakText(word, 0.85);
+  speakText(word, 0.85);
 }
 
 export function spellOutWord(word: string) {
   if (!isSpeechSupported()) return;
   const letters = word.split('').join(', ');
-  void speakText(letters, 0.7);
+  speakText(letters, 0.7);
 }

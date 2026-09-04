@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { GameState } from '../types';
 import { HINT_AFTER_MISSES, hintText, requeue, scoreForAnswer } from '../lib/gameLogic';
-import { isSpeechSupported, speakWord, spellOutWord } from '../lib/speech';
+import {
+  getLastSpeechDebugInfo,
+  isSpeechSupported,
+  speakWord,
+  spellOutWord,
+  type SpeechDebugInfo,
+} from '../lib/speech';
+
+const DEBUG_VOICE = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debugvoice');
 
 interface PlayProps {
   game: GameState;
@@ -29,6 +37,8 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [debugInfo, setDebugInfo] = useState<SpeechDebugInfo | null>(null);
+
   const currentWord = queue[0];
   const speechSupported = isSpeechSupported();
   const missCount = currentWord ? missCounts[currentWord] ?? 0 : 0;
@@ -38,6 +48,12 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
   useEffect(() => {
     if (currentWord) speakWord(currentWord);
   }, [currentWord]);
+
+  useEffect(() => {
+    if (!DEBUG_VOICE) return;
+    const interval = setInterval(() => setDebugInfo(getLastSpeechDebugInfo()), 300);
+    return () => clearInterval(interval);
+  }, []);
 
   function handleSoundItOut() {
     if (!currentWord) return;
@@ -167,6 +183,35 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
 
       {feedback && (
         <div className={`feedback ${feedback.type}`}>{feedback.text}</div>
+      )}
+
+      {DEBUG_VOICE && (
+        <pre
+          style={{
+            marginTop: '1rem',
+            padding: '0.75rem',
+            background: '#1a1a1a',
+            color: '#5CFF9D',
+            fontFamily: 'monospace',
+            fontSize: '0.75rem',
+            borderRadius: '8px',
+            textAlign: 'left',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+          }}
+        >
+          {debugInfo
+            ? [
+                `text: "${debugInfo.text}"`,
+                `voiceName: ${debugInfo.voiceName ?? '(none — using browser default)'}`,
+                `voiceURI: ${debugInfo.voiceURI ?? '-'}`,
+                `isHighQuality: ${debugInfo.isHighQuality}`,
+                `rate: ${debugInfo.rate}`,
+                `voiceCount: ${debugInfo.voiceCount}`,
+                `calledAt: ${debugInfo.calledAt}`,
+              ].join('\n')
+            : 'No speech triggered yet.'}
+        </pre>
       )}
     </>
   );
