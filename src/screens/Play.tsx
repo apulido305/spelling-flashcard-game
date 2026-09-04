@@ -7,6 +7,7 @@ import {
   getPreferredVoiceURI,
   isSpeechSupported,
   setPreferredVoiceURI,
+  soundOutWord,
   speakWord,
   spellOutWord,
   type SpeechDebugInfo,
@@ -76,12 +77,21 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
     if (currentWord) speakWord(currentWord);
   }
 
-  function handleSoundItOut() {
+  function markHelpUsed() {
+    if (!currentWord || usedHelp[currentWord]) return;
+    onGameChange({ ...game, usedHelp: { ...usedHelp, [currentWord]: true } });
+  }
+
+  function handleSpellIt() {
     if (!currentWord) return;
     spellOutWord(currentWord);
-    if (!usedHelp[currentWord]) {
-      onGameChange({ ...game, usedHelp: { ...usedHelp, [currentWord]: true } });
-    }
+    markHelpUsed();
+  }
+
+  function handleSoundOutPhonetically() {
+    if (!currentWord) return;
+    soundOutWord(currentWord);
+    markHelpUsed();
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -168,10 +178,18 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
             <button
               type="button"
               className="speak-button secondary-speak"
-              onClick={handleSoundItOut}
+              onClick={handleSpellIt}
               disabled={!speechSupported}
             >
-              🔤 Sound it out
+              🔤 Spell it
+            </button>
+            <button
+              type="button"
+              className="speak-button secondary-speak"
+              onClick={handleSoundOutPhonetically}
+              disabled={!speechSupported}
+            >
+              🗣️ Sound it out
             </button>
           </div>
           {speechSupported && voices.length > 0 && (
@@ -195,7 +213,7 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
           {showHint && <p className="hint-text">Hint: {hintText(currentWord)}</p>}
           {usedHelp[currentWord] && (
             <p className="help-used-note">
-              Sound it out used — this word is worth 5 points and goes on the review list.
+              Hint used — this word is worth 5 points and goes on the review list.
             </p>
           )}
         </div>
