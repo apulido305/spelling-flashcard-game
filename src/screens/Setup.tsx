@@ -1,12 +1,10 @@
-import { useState } from 'react';
-
 interface SetupProps {
+  text: string;
+  onTextChange: (text: string) => void;
   onWordsReady: (words: string[]) => void;
 }
 
-export default function Setup({ onWordsReady }: SetupProps) {
-  const [text, setText] = useState('');
-
+export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) {
   const words = text
     .split('\n')
     .map((line) => line.trim())
@@ -18,7 +16,7 @@ export default function Setup({ onWordsReady }: SetupProps) {
       <p className="subtitle">Paste this week's spelling words, one per line.</p>
       <textarea
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => onTextChange(e.target.value)}
         placeholder={'example\nnecessary\nrhythm\n...'}
       />
       <div className="button-row">

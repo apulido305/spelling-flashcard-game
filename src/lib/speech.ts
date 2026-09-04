@@ -52,20 +52,21 @@ function pickBestVoice(): SpeechSynthesisVoice | undefined {
   return [...pool].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0];
 }
 
-export function speakWord(word: string) {
-  if (!isSpeechSupported()) return;
+function speakText(text: string, standardVoiceRate: number) {
   const synth = window.speechSynthesis;
 
   function doSpeak() {
-    const utterance = new SpeechSynthesisUtterance(word);
+    const utterance = new SpeechSynthesisUtterance(text);
     utterance.pitch = 1;
 
     const voice = pickBestVoice();
     if (voice) {
       utterance.voice = voice;
-      utterance.rate = isHighQualityVoice(voice) ? 1 : 0.85;
+      // High-quality voices distort at non-native rates (see isHighQualityVoice) —
+      // only slow down the older standard/compact voices, which tolerate it fine.
+      utterance.rate = isHighQualityVoice(voice) ? 1 : standardVoiceRate;
     } else {
-      utterance.rate = 0.85;
+      utterance.rate = standardVoiceRate;
     }
 
     synth.speak(utterance);
@@ -79,4 +80,15 @@ export function speakWord(word: string) {
   } else {
     doSpeak();
   }
+}
+
+export function speakWord(word: string) {
+  if (!isSpeechSupported()) return;
+  speakText(word, 0.85);
+}
+
+export function spellOutWord(word: string) {
+  if (!isSpeechSupported()) return;
+  const letters = word.split('').join(', ');
+  speakText(letters, 0.7);
 }

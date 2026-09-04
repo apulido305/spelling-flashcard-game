@@ -1,34 +1,72 @@
-import { useState } from 'react';
-import type { Screen } from './types';
+import { useEffect, useState } from 'react';
+import type { Screen, GameState } from './types';
+import { initQueue } from './lib/gameLogic';
+import { loadJSON, saveJSON, clearJSON } from './lib/storage';
 import Setup from './screens/Setup';
 import Play from './screens/Play';
 import Summary from './screens/Summary';
 
+interface SessionState {
+  screen: Screen;
+  setupText: string;
+  words: string[];
+  game: GameState | null;
+  finalScore: number;
+  finalMissed: string[];
+}
+
+const STORAGE_KEY = 'session';
+
+function defaultSession(): SessionState {
+  return {
+    screen: 'setup',
+    setupText: '',
+    words: [],
+    game: null,
+    finalScore: 0,
+    finalMissed: [],
+  };
+}
+
+function freshGame(words: string[]): GameState {
+  return { queue: initQueue(words), score: 0, missCounts: {}, wordsCompleted: 0 };
+}
+
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('setup');
-  const [words, setWords] = useState<string[]>([]);
-  const [finalScore, setFinalScore] = useState(0);
-  const [finalMissed, setFinalMissed] = useState<string[]>([]);
+  const [session, setSession] = useState<SessionState>(() =>
+    loadJSON(STORAGE_KEY, defaultSession())
+  );
+
+  useEffect(() => {
+    saveJSON(STORAGE_KEY, session);
+  }, [session]);
+
+  const { screen, setupText, words, game, finalScore, finalMissed } = session;
 
   return (
     <div className="app-card">
       {screen === 'setup' && (
         <Setup
-          onWordsReady={(list) => {
-            setWords(list);
-            setScreen('play');
-          }}
+          text={setupText}
+          onTextChange={(text) => setSession((s) => ({ ...s, setupText: text }))}
+          onWordsReady={(list) =>
+            setSession((s) => ({
+              ...s,
+              screen: 'play',
+              words: list,
+              game: freshGame(list),
+            }))
+          }
         />
       )}
 
-      {screen === 'play' && (
+      {screen === 'play' && game && (
         <Play
-          words={words}
-          onFinish={(score, missed) => {
-            setFinalScore(score);
-            setFinalMissed(missed);
-            setScreen('summary');
-          }}
+          game={game}
+          onGameChange={(g) => setSession((s) => ({ ...s, game: g }))}
+          onFinish={(score, missed) =>
+            setSession((s) => ({ ...s, screen: 'summary', finalScore: score, finalMissed: missed }))
+          }
         />
       )}
 
@@ -36,12 +74,12 @@ export default function App() {
         <Summary
           score={finalScore}
           missed={finalMissed}
-          onPlayAgain={() => setScreen('play')}
+          onPlayAgain={() =>
+            setSession((s) => ({ ...s, screen: 'play', game: freshGame(words) }))
+          }
           onNewList={() => {
-            setWords([]);
-            setFinalScore(0);
-            setFinalMissed([]);
-            setScreen('setup');
+            clearJSON(STORAGE_KEY);
+            setSession(defaultSession());
           }}
         />
       )}
