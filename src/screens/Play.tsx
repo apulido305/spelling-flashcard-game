@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { initQueue, requeue, scoreForAnswer } from '../lib/gameLogic';
-import { isSpeechSupported, speakWord } from '../lib/speech';
+import type { GameState } from '../types';
+import { HINT_AFTER_MISSES, hintText, requeue, scoreForAnswer } from '../lib/gameLogic';
+import { isSpeechSupported, speakWord, spellOutWord } from '../lib/speech';
 
 interface PlayProps {
-  words: string[];
+  game: GameState;
+  onGameChange: (game: GameState) => void;
   onFinish: (score: number, missed: string[]) => void;
 }
 
@@ -15,21 +17,35 @@ interface Feedback {
 const CORRECT_DELAY_MS = 1200;
 const INCORRECT_DELAY_MS = 1800;
 
-export default function Play({ words, onFinish }: PlayProps) {
-  const [queue, setQueue] = useState<string[]>(() => initQueue(words));
-  const [score, setScore] = useState(0);
-  const [missed, setMissed] = useState<Set<string>>(new Set());
-  const [wordsCompleted, setWordsCompleted] = useState(0);
+function reviewWords(missCounts: Record<string, number>, usedHelp: Record<string, boolean>): string[] {
+  const fromMisses = Object.keys(missCounts).filter((w) => missCounts[w] > 0);
+  const fromHelp = Object.keys(usedHelp).filter((w) => usedHelp[w]);
+  return Array.from(new Set([...fromMisses, ...fromHelp]));
+}
+
+export default function Play({ game, onGameChange, onFinish }: PlayProps) {
+  const { queue, score, missCounts, usedHelp = {}, wordsCompleted } = game;
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState(false);
 
   const currentWord = queue[0];
   const speechSupported = isSpeechSupported();
+  const missCount = currentWord ? missCounts[currentWord] ?? 0 : 0;
+  const showHint = missCount >= HINT_AFTER_MISSES;
+  const gotHelpThisWord = currentWord ? !!usedHelp[currentWord] || missCount > 0 : false;
 
   useEffect(() => {
     if (currentWord) speakWord(currentWord);
   }, [currentWord]);
+
+  function handleSoundItOut() {
+    if (!currentWord) return;
+    spellOutWord(currentWord);
+    if (!usedHelp[currentWord]) {
+      onGameChange({ ...game, usedHelp: { ...usedHelp, [currentWord]: true } });
+    }
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,27 +57,33 @@ export default function Play({ words, onFinish }: PlayProps) {
     setBusy(true);
 
     if (isCorrect) {
-      const wasEverMissed = missed.has(currentWord);
-      const points = scoreForAnswer(wasEverMissed);
+      const points = scoreForAnswer(gotHelpThisWord);
       const newScore = score + points;
-      setScore(newScore);
-      setWordsCompleted((c) => c + 1);
+      const newWordsCompleted = wordsCompleted + 1;
       setFeedback({ type: 'correct', text: `Correct! +${points} points` });
 
       const restQueue = queue.slice(1);
       setTimeout(() => {
-        setQueue(restQueue);
         setInput('');
         setFeedback(null);
         setBusy(false);
         if (restQueue.length === 0) {
-          onFinish(newScore, Array.from(missed));
+          onFinish(newScore, reviewWords(missCounts, usedHelp));
+        } else {
+          onGameChange({
+            queue: restQueue,
+            score: newScore,
+            missCounts,
+            usedHelp,
+            wordsCompleted: newWordsCompleted,
+          });
         }
       }, CORRECT_DELAY_MS);
     } else {
-      const newMissed = new Set(missed);
-      newMissed.add(currentWord);
-      setMissed(newMissed);
+      const newMissCounts = {
+        ...missCounts,
+        [currentWord]: (missCounts[currentWord] ?? 0) + 1,
+      };
       setFeedback({
         type: 'incorrect',
         text: `Not quite — it's spelled "${currentWord}"`,
@@ -69,10 +91,16 @@ export default function Play({ words, onFinish }: PlayProps) {
 
       const restQueue = requeue(queue.slice(1), currentWord);
       setTimeout(() => {
-        setQueue(restQueue);
         setInput('');
         setFeedback(null);
         setBusy(false);
+        onGameChange({
+          queue: restQueue,
+          score,
+          missCounts: newMissCounts,
+          usedHelp,
+          wordsCompleted,
+        });
       }, INCORRECT_DELAY_MS);
     }
   }
@@ -91,17 +119,33 @@ export default function Play({ words, onFinish }: PlayProps) {
 
       <div className="play-definition">
         <div className="play-listen">
-          <button
-            type="button"
-            className="speak-button"
-            onClick={() => speakWord(currentWord)}
-            disabled={!speechSupported}
-          >
-            🔊 Hear it again
-          </button>
+          <div className="play-listen-buttons">
+            <button
+              type="button"
+              className="speak-button"
+              onClick={() => speakWord(currentWord)}
+              disabled={!speechSupported}
+            >
+              🔊 Hear it again
+            </button>
+            <button
+              type="button"
+              className="speak-button secondary-speak"
+              onClick={handleSoundItOut}
+              disabled={!speechSupported}
+            >
+              🔤 Sound it out
+            </button>
+          </div>
           {!speechSupported && (
             <p className="error-text">
               Audio isn't supported in this browser — try Chrome, Edge, or Safari.
+            </p>
+          )}
+          {showHint && <p className="hint-text">Hint: {hintText(currentWord)}</p>}
+          {usedHelp[currentWord] && (
+            <p className="help-used-note">
+              Sound it out used — this word is worth 5 points and goes on the review list.
             </p>
           )}
         </div>

@@ -24,3 +24,11 @@ export function requeue(remainingQueue: string[], word: string): string[] {
 export function scoreForAnswer(wasEverMissedThisRound: boolean): number {
   return wasEverMissedThisRound ? 5 : 10;
 }
+
+export const HINT_AFTER_MISSES = 2;
+
+export function hintText(word: string): string {
+  const firstLetter = word[0].toUpperCase();
+  const blanks = Array(word.length - 1).fill('_').join(' ');
+  return blanks ? `${firstLetter} ${blanks}` : firstLetter;
+}

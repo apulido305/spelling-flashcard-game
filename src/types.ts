@@ -3,5 +3,7 @@ export type Screen = 'setup' | 'play' | 'summary';
 export interface GameState {
   queue: string[];
   score: number;
-  missed: Set<string>;
+  missCounts: Record<string, number>;
+  usedHelp: Record<string, boolean>;
+  wordsCompleted: number;
 }
