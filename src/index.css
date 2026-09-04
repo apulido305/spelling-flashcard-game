@@ -177,6 +177,14 @@ button.secondary:hover:not(:disabled) {
   margin: 0;
 }
 
+.help-used-note {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #3d7a6c;
+  margin: 0;
+  text-align: center;
+}
+
 .play-form {
   display: flex;
   gap: 0.75rem;

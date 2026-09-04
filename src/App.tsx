@@ -29,7 +29,7 @@ function defaultSession(): SessionState {
 }
 
 function freshGame(words: string[]): GameState {
-  return { queue: initQueue(words), score: 0, missCounts: {}, wordsCompleted: 0 };
+  return { queue: initQueue(words), score: 0, missCounts: {}, usedHelp: {}, wordsCompleted: 0 };
 }
 
 export default function App() {

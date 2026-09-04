@@ -17,8 +17,14 @@ interface Feedback {
 const CORRECT_DELAY_MS = 1200;
 const INCORRECT_DELAY_MS = 1800;
 
+function reviewWords(missCounts: Record<string, number>, usedHelp: Record<string, boolean>): string[] {
+  const fromMisses = Object.keys(missCounts).filter((w) => missCounts[w] > 0);
+  const fromHelp = Object.keys(usedHelp).filter((w) => usedHelp[w]);
+  return Array.from(new Set([...fromMisses, ...fromHelp]));
+}
+
 export default function Play({ game, onGameChange, onFinish }: PlayProps) {
-  const { queue, score, missCounts, wordsCompleted } = game;
+  const { queue, score, missCounts, usedHelp = {}, wordsCompleted } = game;
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,10 +33,19 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
   const speechSupported = isSpeechSupported();
   const missCount = currentWord ? missCounts[currentWord] ?? 0 : 0;
   const showHint = missCount >= HINT_AFTER_MISSES;
+  const gotHelpThisWord = currentWord ? !!usedHelp[currentWord] || missCount > 0 : false;
 
   useEffect(() => {
     if (currentWord) speakWord(currentWord);
   }, [currentWord]);
+
+  function handleSoundItOut() {
+    if (!currentWord) return;
+    spellOutWord(currentWord);
+    if (!usedHelp[currentWord]) {
+      onGameChange({ ...game, usedHelp: { ...usedHelp, [currentWord]: true } });
+    }
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,8 +57,7 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
     setBusy(true);
 
     if (isCorrect) {
-      const wasEverMissed = (missCounts[currentWord] ?? 0) > 0;
-      const points = scoreForAnswer(wasEverMissed);
+      const points = scoreForAnswer(gotHelpThisWord);
       const newScore = score + points;
       const newWordsCompleted = wordsCompleted + 1;
       setFeedback({ type: 'correct', text: `Correct! +${points} points` });
@@ -54,13 +68,13 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
         setFeedback(null);
         setBusy(false);
         if (restQueue.length === 0) {
-          const missed = Object.keys(missCounts).filter((w) => missCounts[w] > 0);
-          onFinish(newScore, missed);
+          onFinish(newScore, reviewWords(missCounts, usedHelp));
         } else {
           onGameChange({
             queue: restQueue,
             score: newScore,
             missCounts,
+            usedHelp,
             wordsCompleted: newWordsCompleted,
           });
         }
@@ -84,6 +98,7 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
           queue: restQueue,
           score,
           missCounts: newMissCounts,
+          usedHelp,
           wordsCompleted,
         });
       }, INCORRECT_DELAY_MS);
@@ -116,7 +131,7 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
             <button
               type="button"
               className="speak-button secondary-speak"
-              onClick={() => spellOutWord(currentWord)}
+              onClick={handleSoundItOut}
               disabled={!speechSupported}
             >
               🔤 Sound it out
@@ -128,6 +143,11 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
             </p>
           )}
           {showHint && <p className="hint-text">Hint: {hintText(currentWord)}</p>}
+          {usedHelp[currentWord] && (
+            <p className="help-used-note">
+              Sound it out used — this word is worth 5 points and goes on the review list.
+            </p>
+          )}
         </div>
       </div>
 
