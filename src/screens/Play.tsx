@@ -71,8 +71,10 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
 
   function handleSoundOutPhonetically() {
     if (!currentWord) return;
+    // Unlike Spell it (which names every letter outright), sounding a word
+    // out phonetically is a spelling strategy we want to encourage, not a
+    // hint that gives the answer away — no score/review-list penalty.
     soundOutWord(currentWord);
-    markHelpUsed();
   }
 
   function handleRestartClick() {
@@ -193,7 +195,7 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
           {showHint && <p className="hint-text">Hint: {hintText(currentWord)}</p>}
           {usedHelp[currentWord] && (
             <p className="help-used-note">
-              Hint used — this word is worth 5 points and goes on the review list.
+              Spell it used — this word is worth 5 points and goes on the review list.
             </p>
           )}
         </div>
