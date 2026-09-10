@@ -191,25 +191,6 @@ button.secondary:hover:not(:disabled) {
   background: #58a091;
 }
 
-.voice-picker {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  color: #6b6459;
-}
-
-.voice-picker select {
-  font-size: 0.85rem;
-  font-family: inherit;
-  padding: 0.3rem 0.5rem;
-  border-radius: 8px;
-  border: 1px solid #d9cfc0;
-  background: #fffdfa;
-  color: #2d2a26;
-  max-width: 180px;
-}
-
 .hint-text {
   font-size: 1.2rem;
   font-weight: 700;
