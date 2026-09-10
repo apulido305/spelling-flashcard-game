@@ -19,6 +19,8 @@ interface PlayProps {
   game: GameState;
   onGameChange: (game: GameState) => void;
   onFinish: (score: number, missed: string[]) => void;
+  onRestart: () => void;
+  onNewList: () => void;
 }
 
 interface Feedback {
@@ -35,7 +37,7 @@ function reviewWords(missCounts: Record<string, number>, usedHelp: Record<string
   return Array.from(new Set([...fromMisses, ...fromHelp]));
 }
 
-export default function Play({ game, onGameChange, onFinish }: PlayProps) {
+export default function Play({ game, onGameChange, onFinish, onRestart, onNewList }: PlayProps) {
   const { queue, score, missCounts, usedHelp = {}, wordsCompleted } = game;
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -92,6 +94,18 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
     if (!currentWord) return;
     soundOutWord(currentWord);
     markHelpUsed();
+  }
+
+  function handleRestartClick() {
+    if (window.confirm('Restart this word list? Your current score and progress will be lost.')) {
+      onRestart();
+    }
+  }
+
+  function handleNewListClick() {
+    if (window.confirm('Start a new list? Your current progress will be lost.')) {
+      onNewList();
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -236,6 +250,15 @@ export default function Play({ game, onGameChange, onFinish }: PlayProps) {
       {feedback && (
         <div className={`feedback ${feedback.type}`}>{feedback.text}</div>
       )}
+
+      <div className="button-row">
+        <button type="button" className="secondary" onClick={handleRestartClick}>
+          🔄 Restart
+        </button>
+        <button type="button" className="secondary" onClick={handleNewListClick}>
+          🏠 New List
+        </button>
+      </div>
 
       {DEBUG_VOICE && (
         <pre
