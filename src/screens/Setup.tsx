@@ -36,6 +36,11 @@ export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) 
         <button onClick={() => onWordsReady(words)} disabled={words.length === 0}>
           Start Game
         </button>
+        {text.length > 0 && (
+          <button type="button" className="secondary" onClick={() => onTextChange('')}>
+            Clear
+          </button>
+        )}
       </div>
     </>
   );

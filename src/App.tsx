@@ -43,6 +43,11 @@ export default function App() {
 
   const { screen, setupText, words, game, finalScore, finalMissed } = session;
 
+  function handleNewList() {
+    clearJSON(STORAGE_KEY);
+    setSession(defaultSession());
+  }
+
   return (
     <div className="app-card">
       {screen === 'setup' && (
@@ -67,6 +72,8 @@ export default function App() {
           onFinish={(score, missed) =>
             setSession((s) => ({ ...s, screen: 'summary', finalScore: score, finalMissed: missed }))
           }
+          onRestart={() => setSession((s) => ({ ...s, game: freshGame(words) }))}
+          onNewList={handleNewList}
         />
       )}
 
@@ -77,10 +84,7 @@ export default function App() {
           onPlayAgain={() =>
             setSession((s) => ({ ...s, screen: 'play', game: freshGame(words) }))
           }
-          onNewList={() => {
-            clearJSON(STORAGE_KEY);
-            setSession(defaultSession());
-          }}
+          onNewList={handleNewList}
         />
       )}
     </div>
