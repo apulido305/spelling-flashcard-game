@@ -1,4 +1,3 @@
-import { loadJSON, saveJSON } from './storage';
 import { syllabify } from './phonetics';
 
 export function isSpeechSupported(): boolean {
@@ -58,37 +57,14 @@ function scoreVoice(voice: SpeechSynthesisVoice): number {
   return score;
 }
 
-const VOICE_PREFERENCE_KEY = 'voicePreference';
-let preferredVoiceURI: string | null = loadJSON<string | null>(VOICE_PREFERENCE_KEY, null);
-
-export function getPreferredVoiceURI(): string | null {
-  return preferredVoiceURI;
-}
-
-export function setPreferredVoiceURI(uri: string | null) {
-  preferredVoiceURI = uri;
-  saveJSON(VOICE_PREFERENCE_KEY, uri);
-}
-
-// Exposed so a settings UI can list real choices instead of relying on the
-// auto-picked "best" voice — the auto-pick is only ever a fallback default.
-export function getAvailableVoices(): SpeechSynthesisVoice[] {
-  const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
-  const englishVoices = voices.filter((v) => v.lang.startsWith('en') && !isNoveltyVoice(v));
-  return (englishVoices.length ? englishVoices : voices).sort((a, b) => scoreVoice(b) - scoreVoice(a));
-}
-
+// No manual voice override: letting a user pick a specific non-default voice
+// was confirmed to cause the same distortion the novelty-voice fix solved —
+// on the one real device this was tested on, *every* explicitly-selected
+// voice other than whatever the auto-pick lands on came out garbled. Rather
+// than chase that further blind, auto-pick is now the only path.
 function pickBestVoice(): SpeechSynthesisVoice | undefined {
-  // Synchronous by design: speak() must stay in the same call stack as the
-  // triggering user gesture (button tap) or iOS Safari can degrade playback
-  // quality for higher-tier voices. Never await anything before speaking.
   const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
   if (voices.length === 0) return undefined;
-
-  if (preferredVoiceURI) {
-    const chosen = voices.find((v) => v.voiceURI === preferredVoiceURI);
-    if (chosen) return chosen;
-  }
 
   const englishVoices = voices.filter((v) => v.lang.startsWith('en') && !isNoveltyVoice(v));
   const pool = englishVoices.length ? englishVoices : voices.filter((v) => !isNoveltyVoice(v));
