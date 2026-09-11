@@ -466,6 +466,60 @@ test('Progress dashboard: hidden when empty, reflects streak/mastery/quiz histor
   await context.close();
 });
 
+test('Example sentences: optional "word | sentence" syntax, spoken format, and save/load round-trip', async (browser) => {
+  const { context, page, pageErrors } = await newPage(browser);
+
+  const rawText = 'cat\nthere | The book is over there.';
+  await page.fill('textarea', rawText);
+  await page.click('button:has-text("Start Game")');
+  await page.waitForSelector('.play-definition', { timeout: 5000 });
+
+  // "there" is spoken as a full sentence, not just the word - can't rely on
+  // lastSpoken() as the literal guess text here like other tests do.
+  for (let i = 0; i < 2; i++) {
+    const spokenText = await lastSpoken(page);
+    const notePresent = await page.locator('.sentence-note').isVisible().catch(() => false);
+
+    if (spokenText.includes('The book is over there')) {
+      assert(
+        spokenText === 'there. The book is over there. there.',
+        `Expected the classic word-sentence-word format, got: "${spokenText}"`
+      );
+      assert(notePresent, 'Sentence indicator should show for "there"');
+      await page.fill('input[type="text"]', 'there');
+    } else {
+      assert(spokenText === 'cat', `Expected plain word for "cat" (no sentence), got: "${spokenText}"`);
+      assert(!notePresent, 'Sentence indicator should not show for "cat" (no sentence attached)');
+      await page.fill('input[type="text"]', 'cat');
+    }
+
+    await page.click('button[type="submit"]');
+    await page.waitForSelector('.feedback.correct', { timeout: 3000 });
+    await page.waitForSelector('.feedback', { state: 'detached', timeout: 3000 }).catch(() => {});
+  }
+  await page.waitForSelector('text=Session Complete!', { timeout: 5000 });
+  await page.click('button:has-text("New List")');
+  await page.waitForSelector('text=Ready to practice', { timeout: 5000 });
+
+  // Save/load round-trip: the pipe syntax must survive, not just the words.
+  await page.fill('textarea', rawText);
+  await page.click('button:has-text("Save List")');
+  await page.waitForTimeout(200);
+  await page.click('button:has-text("Clear")');
+  await page
+    .locator('.saved-list-row', { hasText: 'Smoke Test List' })
+    .locator('button:has-text("Load")')
+    .click();
+  const loadedText = await page.locator('textarea').inputValue();
+  assert(
+    loadedText === rawText,
+    `Expected the raw "word | sentence" syntax to round-trip through save/load, got: "${loadedText}"`
+  );
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 async function main() {
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
   let failures = 0;

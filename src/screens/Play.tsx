@@ -14,6 +14,7 @@ const DEBUG_VOICE = typeof window !== 'undefined' && new URLSearchParams(window.
 
 interface PlayProps {
   game: GameState;
+  sentences: Record<string, string>;
   onGameChange: (game: GameState) => void;
   onFinish: (score: number, missed: string[]) => void;
   onRestart: () => void;
@@ -34,7 +35,7 @@ function reviewWords(missCounts: Record<string, number>, usedHelp: Record<string
   return Array.from(new Set([...fromMisses, ...fromHelp]));
 }
 
-export default function Play({ game, onGameChange, onFinish, onRestart, onNewList }: PlayProps) {
+export default function Play({ game, sentences, onGameChange, onFinish, onRestart, onNewList }: PlayProps) {
   const { mode, queue, score, missCounts, usedHelp = {}, wordsCompleted } = game;
   const isQuiz = mode === 'quiz';
   const [input, setInput] = useState('');
@@ -44,13 +45,14 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
   const [debugInfo, setDebugInfo] = useState<SpeechDebugInfo | null>(null);
 
   const currentWord = queue[0];
+  const currentSentence = currentWord ? sentences[currentWord] : undefined;
   const speechSupported = isSpeechSupported();
   const missCount = currentWord ? missCounts[currentWord] ?? 0 : 0;
   const showHint = !isQuiz && missCount >= HINT_AFTER_MISSES;
   const gotHelpThisWord = currentWord ? !!usedHelp[currentWord] || missCount > 0 : false;
 
   useEffect(() => {
-    if (currentWord) speakWord(currentWord);
+    if (currentWord) speakWord(currentWord, sentences[currentWord]);
   }, [currentWord]);
 
   useEffect(() => {
@@ -205,7 +207,7 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
             <button
               type="button"
               className="speak-button"
-              onClick={() => speakWord(currentWord)}
+              onClick={() => speakWord(currentWord, currentSentence)}
               disabled={!speechSupported}
             >
               🔊 Hear it again
@@ -235,6 +237,9 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
             <p className="error-text">
               Audio isn't supported in this browser — try Chrome, Edge, or Safari.
             </p>
+          )}
+          {currentSentence && (
+            <p className="sentence-note">📖 Includes an example sentence</p>
           )}
           {showHint && <p className="hint-text">Hint: {hintText(currentWord)}</p>}
           {!isQuiz && usedHelp[currentWord] && (

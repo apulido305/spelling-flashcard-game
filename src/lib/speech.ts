@@ -124,9 +124,13 @@ function speakText(text: string, standardVoiceRate: number) {
   }
 }
 
-export function speakWord(word: string) {
+// The classic spelling-test format ("word. sentence. word.") - particularly
+// valuable for homophones (their/there/they're) where the word alone is
+// ambiguous. sentence is optional; falls back to just the word.
+export function speakWord(word: string, sentence?: string) {
   if (!isSpeechSupported()) return;
-  speakText(word, 0.85);
+  const text = sentence ? `${word}. ${sentence} ${word}.` : word;
+  speakText(text, 0.85);
 }
 
 export function spellOutWord(word: string) {
