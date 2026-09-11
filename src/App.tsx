@@ -5,6 +5,7 @@ import { loadJSON, saveJSON, clearJSON } from './lib/storage';
 import { getMasteredSet, recordSessionResults } from './lib/mastery';
 import { recordDayPracticed } from './lib/streak';
 import { recordQuizResult } from './lib/quizHistory';
+import { getAccessibilitySettings, saveAccessibilitySettings } from './lib/accessibility';
 import Setup from './screens/Setup';
 import Play from './screens/Play';
 import Summary from './screens/Summary';
@@ -51,16 +52,32 @@ export default function App() {
   const [session, setSession] = useState<SessionState>(() =>
     loadJSON(STORAGE_KEY, defaultSession())
   );
+  const [settings, setSettings] = useState(() => getAccessibilitySettings());
 
   useEffect(() => {
     saveJSON(STORAGE_KEY, session);
   }, [session]);
+
+  // Applied at the document root, not just the app card, so the large-text
+  // toggle's rem-based scaling reaches every element (rem is always relative
+  // to the root <html> font-size, regardless of where a class is applied).
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('large-text', settings.largeText);
+    root.classList.toggle('high-contrast', settings.highContrast);
+    root.classList.toggle('dyslexia-font', settings.dyslexiaFont);
+  }, [settings]);
 
   const { screen, setupText, words, sentences, game, finalScore, finalMissed, finalNewlyMastered } = session;
 
   function handleNewList() {
     clearJSON(STORAGE_KEY);
     setSession(defaultSession());
+  }
+
+  function handleSettingsChange(next: typeof settings) {
+    setSettings(next);
+    saveAccessibilitySettings(next);
   }
 
   return (
@@ -78,6 +95,8 @@ export default function App() {
               game: freshGame(list, mode),
             }))
           }
+          settings={settings}
+          onSettingsChange={handleSettingsChange}
         />
       )}
 

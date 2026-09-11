@@ -6,15 +6,23 @@ import { getMasteredSet } from '../lib/mastery';
 import { getCurrentStreak } from '../lib/streak';
 import { getRecentQuizResults } from '../lib/quizHistory';
 import { parseWordListText } from '../lib/wordList';
+import { speakWord } from '../lib/speech';
+import type { AccessibilitySettings } from '../lib/accessibility';
 
 interface SetupProps {
   text: string;
   onTextChange: (text: string) => void;
   onWordsReady: (words: string[], mode: GameMode, sentences: Record<string, string>) => void;
+  settings: AccessibilitySettings;
+  onSettingsChange: (settings: AccessibilitySettings) => void;
 }
 
-export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) {
+export default function Setup({ text, onTextChange, onWordsReady, settings, onSettingsChange }: SetupProps) {
   const [savedLists, setSavedLists] = useState<SavedList[]>(() => getSavedLists());
+
+  function updateSettings(partial: Partial<AccessibilitySettings>) {
+    onSettingsChange({ ...settings, ...partial });
+  }
 
   const rawLines = text
     .split('\n')
@@ -145,6 +153,53 @@ export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) 
           </button>
         )}
       </div>
+
+      <details className="settings">
+        <summary>⚙️ Settings</summary>
+        <div className="settings-body">
+          <label className="settings-row settings-rate-row">
+            <span>Speech rate: {Math.round(settings.rateMultiplier * 100)}%</span>
+            <input
+              type="range"
+              min="0.5"
+              max="1.5"
+              step="0.1"
+              value={settings.rateMultiplier}
+              onChange={(e) => updateSettings({ rateMultiplier: parseFloat(e.target.value) })}
+            />
+            <button type="button" className="secondary" onClick={() => speakWord('example')}>
+              🔊 Preview
+            </button>
+          </label>
+          <p className="settings-note">
+            Note: on some higher-quality voices, speech rate stays fixed to avoid audio distortion.
+          </p>
+          <label className="settings-row">
+            <input
+              type="checkbox"
+              checked={settings.largeText}
+              onChange={(e) => updateSettings({ largeText: e.target.checked })}
+            />
+            Larger text
+          </label>
+          <label className="settings-row">
+            <input
+              type="checkbox"
+              checked={settings.highContrast}
+              onChange={(e) => updateSettings({ highContrast: e.target.checked })}
+            />
+            High contrast
+          </label>
+          <label className="settings-row">
+            <input
+              type="checkbox"
+              checked={settings.dyslexiaFont}
+              onChange={(e) => updateSettings({ dyslexiaFont: e.target.checked })}
+            />
+            Dyslexia-friendly font
+          </label>
+        </div>
+      </details>
     </>
   );
 }

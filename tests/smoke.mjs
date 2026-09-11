@@ -520,6 +520,121 @@ test('Example sentences: optional "word | sentence" syntax, spoken format, and s
   await context.close();
 });
 
+test('Accessibility settings: rate multiplier never touches high-quality voices, toggles, and persistence', async (browser) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on('pageerror', (err) => pageErrors.push(String(err)));
+
+  await page.addInitScript(() => {
+    // Bypass the native SpeechSynthesisUtterance.voice type-check so fake
+    // voice objects (shaped like real ones, but plain JS objects) can be
+    // assigned without the browser rejecting them.
+    const voiceValues = new WeakMap();
+    Object.defineProperty(SpeechSynthesisUtterance.prototype, 'voice', {
+      get() {
+        return voiceValues.get(this) ?? null;
+      },
+      set(v) {
+        voiceValues.set(this, v);
+      },
+      configurable: true,
+    });
+
+    window.__spoken = [];
+    if (window.speechSynthesis) {
+      window.speechSynthesis.getVoices = () => [
+        { name: 'Ava', voiceURI: 'com.apple.voice.enhanced.en-US.Ava', lang: 'en-US', localService: true },
+      ];
+      window.speechSynthesis.speak = (utterance) => {
+        window.__spoken.push({
+          text: utterance.text,
+          rate: utterance.rate,
+          voice: utterance.voice ? utterance.voice.name : null,
+        });
+      };
+    }
+  });
+
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('text=Ready to practice', { timeout: 10000 });
+
+  await page.click('summary:has-text("Settings")');
+  await page.locator('input[type="range"]').fill('0.6');
+
+  // Part 1: only a high-quality voice available - rate must stay fixed at 1
+  // no matter what the slider says. This is the critical safety property;
+  // overriding it is exactly what caused the iOS distortion bug fixed
+  // earlier in this project.
+  await page.click('button:has-text("Preview")');
+  await page.waitForTimeout(150);
+  let last = await page.evaluate(() => window.__spoken[window.__spoken.length - 1]);
+  assert(
+    last.voice === 'Ava' && last.rate === 1,
+    `High-quality voice rate must stay 1 regardless of the rate slider, got: ${JSON.stringify(last)}`
+  );
+
+  // Part 2: swap in a standard-tier voice (and force speech.ts's voice
+  // cache to refresh via the same 'voiceschanged' event it already
+  // listens for) - now the multiplier should apply.
+  await page.evaluate(() => {
+    window.speechSynthesis.getVoices = () => [
+      { name: 'Samantha', voiceURI: 'com.apple.voice.compact.en-US.Samantha', lang: 'en-US', localService: true },
+    ];
+    window.speechSynthesis.dispatchEvent(new Event('voiceschanged'));
+  });
+  await page.click('button:has-text("Preview")');
+  await page.waitForTimeout(150);
+  last = await page.evaluate(() => window.__spoken[window.__spoken.length - 1]);
+  const expectedRate = 0.85 * 0.6; // speakWord's base rate * the 60% multiplier
+  assert(
+    last.voice === 'Samantha' && Math.abs(last.rate - expectedRate) < 0.01,
+    `Expected Samantha at rate ~${expectedRate.toFixed(2)}, got: ${JSON.stringify(last)}`
+  );
+
+  // Toggles apply classes to <html> (required for rem-based large-text
+  // scaling to reach every element, not just the app card).
+  async function toggleSetting(label) {
+    await page.locator('.settings-row', { hasText: label }).locator('input[type="checkbox"]').click();
+  }
+  async function hasHtmlClass(className) {
+    return page.evaluate((c) => document.documentElement.classList.contains(c), className);
+  }
+
+  await toggleSetting('Larger text');
+  assert(await hasHtmlClass('large-text'), 'Expected html.large-text after toggling Larger text');
+
+  await toggleSetting('High contrast');
+  assert(await hasHtmlClass('high-contrast'), 'Expected html.high-contrast after toggling High contrast');
+
+  await toggleSetting('Dyslexia-friendly font');
+  assert(await hasHtmlClass('dyslexia-font'), 'Expected html.dyslexia-font after toggling Dyslexia-friendly font');
+
+  // Settings must survive a New List reset - they're a device preference,
+  // not part of the current session/word-list state.
+  await page.fill('textarea', 'cat\ndog');
+  await page.click('button:has-text("Start Game")');
+  await page.waitForSelector('.play-definition', { timeout: 5000 });
+  await page.once('dialog', (d) => d.accept());
+  await page.click('button:has-text("New List")');
+  await page.waitForSelector('text=Ready to practice', { timeout: 5000 });
+  assert(await hasHtmlClass('large-text'), 'Accessibility settings should survive New List');
+
+  // And across a full reload.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('text=Ready to practice', { timeout: 10000 });
+  const classesAfterReload = await page.evaluate(() => Array.from(document.documentElement.classList));
+  assert(
+    ['large-text', 'high-contrast', 'dyslexia-font'].every((c) => classesAfterReload.includes(c)),
+    `Expected all 3 accessibility classes to persist after reload, got: ${JSON.stringify(classesAfterReload)}`
+  );
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 async function main() {
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
   let failures = 0;
