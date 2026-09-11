@@ -35,7 +35,8 @@ function reviewWords(missCounts: Record<string, number>, usedHelp: Record<string
 }
 
 export default function Play({ game, onGameChange, onFinish, onRestart, onNewList }: PlayProps) {
-  const { queue, score, missCounts, usedHelp = {}, wordsCompleted } = game;
+  const { mode, queue, score, missCounts, usedHelp = {}, wordsCompleted } = game;
+  const isQuiz = mode === 'quiz';
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,7 +46,7 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
   const currentWord = queue[0];
   const speechSupported = isSpeechSupported();
   const missCount = currentWord ? missCounts[currentWord] ?? 0 : 0;
-  const showHint = missCount >= HINT_AFTER_MISSES;
+  const showHint = !isQuiz && missCount >= HINT_AFTER_MISSES;
   const gotHelpThisWord = currentWord ? !!usedHelp[currentWord] || missCount > 0 : false;
 
   useEffect(() => {
@@ -78,9 +79,10 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
   }
 
   function handleRestartClick() {
-    if (window.confirm('Restart this word list? Your current score and progress will be lost.')) {
-      onRestart();
-    }
+    const message = isQuiz
+      ? 'Restart this test? Your current progress will be lost.'
+      : 'Restart this word list? Your current score and progress will be lost.';
+    if (window.confirm(message)) onRestart();
   }
 
   function handleNewListClick() {
@@ -98,6 +100,47 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
     const isCorrect = guess.toLowerCase() === currentWord.toLowerCase();
     setBusy(true);
 
+    if (isQuiz) {
+      // Quiz mode: one attempt per word, no requeue on a miss — the word is
+      // done either way, since this is a readiness check, not practice.
+      const restQueue = queue.slice(1);
+      const newWordsCompleted = wordsCompleted + 1;
+
+      if (isCorrect) {
+        const newScore = score + 1;
+        setFeedback({ type: 'correct', text: 'Correct!' });
+        setTimeout(() => {
+          setInput('');
+          setFeedback(null);
+          setBusy(false);
+          if (restQueue.length === 0) {
+            onFinish(newScore, reviewWords(missCounts, usedHelp));
+          } else {
+            onGameChange({ ...game, queue: restQueue, score: newScore, wordsCompleted: newWordsCompleted });
+          }
+        }, CORRECT_DELAY_MS);
+      } else {
+        const newMissCounts = { ...missCounts, [currentWord]: (missCounts[currentWord] ?? 0) + 1 };
+        setFeedback({ type: 'incorrect', text: `Not quite — it's spelled "${currentWord}"` });
+        setTimeout(() => {
+          setInput('');
+          setFeedback(null);
+          setBusy(false);
+          if (restQueue.length === 0) {
+            onFinish(score, reviewWords(newMissCounts, usedHelp));
+          } else {
+            onGameChange({
+              ...game,
+              queue: restQueue,
+              missCounts: newMissCounts,
+              wordsCompleted: newWordsCompleted,
+            });
+          }
+        }, INCORRECT_DELAY_MS);
+      }
+      return;
+    }
+
     if (isCorrect) {
       const points = scoreForAnswer(gotHelpThisWord);
       const newScore = score + points;
@@ -113,10 +156,9 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
           onFinish(newScore, reviewWords(missCounts, usedHelp));
         } else {
           onGameChange({
+            ...game,
             queue: restQueue,
             score: newScore,
-            missCounts,
-            usedHelp,
             wordsCompleted: newWordsCompleted,
           });
         }
@@ -137,11 +179,9 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
         setFeedback(null);
         setBusy(false);
         onGameChange({
+          ...game,
           queue: restQueue,
-          score,
           missCounts: newMissCounts,
-          usedHelp,
-          wordsCompleted,
         });
       }, INCORRECT_DELAY_MS);
     }
@@ -155,7 +195,7 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
     <>
       <div className="play-progress">
         <span>Word {wordsCompleted + 1}</span>
-        <span>Score: {score}</span>
+        <span>{isQuiz ? `Correct: ${score}` : `Score: ${score}`}</span>
         <span>{queue.length - 1} left in queue</span>
       </div>
 
@@ -170,22 +210,26 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
             >
               🔊 Hear it again
             </button>
-            <button
-              type="button"
-              className="speak-button secondary-speak"
-              onClick={handleSpellIt}
-              disabled={!speechSupported}
-            >
-              🔤 Spell it
-            </button>
-            <button
-              type="button"
-              className="speak-button secondary-speak"
-              onClick={handleSoundOutPhonetically}
-              disabled={!speechSupported}
-            >
-              🗣️ Sound it out
-            </button>
+            {!isQuiz && (
+              <>
+                <button
+                  type="button"
+                  className="speak-button secondary-speak"
+                  onClick={handleSpellIt}
+                  disabled={!speechSupported}
+                >
+                  🔤 Spell it
+                </button>
+                <button
+                  type="button"
+                  className="speak-button secondary-speak"
+                  onClick={handleSoundOutPhonetically}
+                  disabled={!speechSupported}
+                >
+                  🗣️ Sound it out
+                </button>
+              </>
+            )}
           </div>
           {!speechSupported && (
             <p className="error-text">
@@ -193,7 +237,7 @@ export default function Play({ game, onGameChange, onFinish, onRestart, onNewLis
             </p>
           )}
           {showHint && <p className="hint-text">Hint: {hintText(currentWord)}</p>}
-          {usedHelp[currentWord] && (
+          {!isQuiz && usedHelp[currentWord] && (
             <p className="help-used-note">
               Spell it used — this word is worth 5 points and goes on the review list.
             </p>
