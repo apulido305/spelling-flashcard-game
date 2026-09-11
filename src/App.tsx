@@ -3,6 +3,8 @@ import type { Screen, GameState, GameMode } from './types';
 import { initQueueWithMastery } from './lib/gameLogic';
 import { loadJSON, saveJSON, clearJSON } from './lib/storage';
 import { getMasteredSet, recordSessionResults } from './lib/mastery';
+import { recordDayPracticed } from './lib/streak';
+import { recordQuizResult } from './lib/quizHistory';
 import Setup from './screens/Setup';
 import Play from './screens/Play';
 import Summary from './screens/Summary';
@@ -87,6 +89,8 @@ export default function App() {
             // fast-track) the calmer practice-mode mastery signal.
             const newlyMastered =
               game.mode === 'practice' ? recordSessionResults(words, missed) : [];
+            recordDayPracticed();
+            if (game.mode === 'quiz') recordQuizResult(score, words.length);
             setSession((s) => ({
               ...s,
               screen: 'summary',

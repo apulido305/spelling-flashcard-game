@@ -2,6 +2,9 @@ import { useState } from 'react';
 import type { GameMode } from '../types';
 import { DEFAULT_WORDS } from '../lib/defaultWords';
 import { deleteList, getSavedLists, saveList, type SavedList } from '../lib/savedLists';
+import { getMasteredSet } from '../lib/mastery';
+import { getCurrentStreak } from '../lib/streak';
+import { getRecentQuizResults } from '../lib/quizHistory';
 
 interface SetupProps {
   text: string;
@@ -16,6 +19,11 @@ export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) 
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+
+  const streak = getCurrentStreak();
+  const recentQuizzes = getRecentQuizResults();
+  const masteredCount = words.length > 0 ? getMasteredSet(words).size : 0;
+  const hasDashboardContent = streak > 0 || recentQuizzes.length > 0 || words.length > 0;
 
   function handleSaveList() {
     const name = window.prompt('Name this list (e.g. "Week 3 words"):');
@@ -36,6 +44,29 @@ export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) 
   return (
     <>
       <h1>Spelling Practice</h1>
+
+      {hasDashboardContent && (
+        <div className="dashboard">
+          <p className="subtitle">📊 Your progress:</p>
+          <div className="dashboard-stats">
+            {streak > 0 && (
+              <span className="dashboard-chip">
+                🔥 {streak} day{streak === 1 ? '' : 's'} in a row
+              </span>
+            )}
+            {words.length > 0 && (
+              <span className="dashboard-chip">
+                🌟 {masteredCount} / {words.length} words mastered
+              </span>
+            )}
+          </div>
+          {recentQuizzes.length > 0 && (
+            <p className="dashboard-quizzes">
+              📝 Recent tests: {recentQuizzes.map((q) => `${q.score}/${q.total}`).join(' · ')}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="quick-start">
         <p className="subtitle">Ready to practice this week's words?</p>
