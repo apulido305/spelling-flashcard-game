@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { GameState } from '../types';
 import { HINT_AFTER_MISSES, hintText, requeue, scoreForAnswer } from '../lib/gameLogic';
+import { classifyMistake } from '../lib/spellDiff';
 import {
   getLastSpeechDebugInfo,
   isSpeechSupported,
@@ -28,6 +29,11 @@ interface Feedback {
 
 const CORRECT_DELAY_MS = 1200;
 const INCORRECT_DELAY_MS = 1800;
+
+function incorrectFeedbackText(guess: string, word: string): string {
+  const mistakeHint = classifyMistake(guess, word);
+  return mistakeHint ? `${mistakeHint} It's spelled "${word}".` : `Not quite — it's spelled "${word}"`;
+}
 
 function reviewWords(missCounts: Record<string, number>, usedHelp: Record<string, boolean>): string[] {
   const fromMisses = Object.keys(missCounts).filter((w) => missCounts[w] > 0);
@@ -123,7 +129,7 @@ export default function Play({ game, sentences, onGameChange, onFinish, onRestar
         }, CORRECT_DELAY_MS);
       } else {
         const newMissCounts = { ...missCounts, [currentWord]: (missCounts[currentWord] ?? 0) + 1 };
-        setFeedback({ type: 'incorrect', text: `Not quite — it's spelled "${currentWord}"` });
+        setFeedback({ type: 'incorrect', text: incorrectFeedbackText(guess, currentWord) });
         setTimeout(() => {
           setInput('');
           setFeedback(null);
@@ -172,7 +178,7 @@ export default function Play({ game, sentences, onGameChange, onFinish, onRestar
       };
       setFeedback({
         type: 'incorrect',
-        text: `Not quite — it's spelled "${currentWord}"`,
+        text: incorrectFeedbackText(guess, currentWord),
       });
 
       const restQueue = requeue(queue.slice(1), currentWord);

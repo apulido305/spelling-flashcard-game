@@ -2,12 +2,18 @@ import { useState } from 'react';
 import type { GameMode } from '../types';
 import { DEFAULT_WORDS } from '../lib/defaultWords';
 import { deleteList, getSavedLists, saveList, type SavedList } from '../lib/savedLists';
-import { getMasteredSet } from '../lib/mastery';
+import { getMasteredSet, getMasteryStatuses, getReviewWords } from '../lib/mastery';
 import { getCurrentStreak } from '../lib/streak';
 import { getRecentQuizResults } from '../lib/quizHistory';
 import { parseWordListText } from '../lib/wordList';
 import { speakWord } from '../lib/speech';
 import type { AccessibilitySettings } from '../lib/accessibility';
+
+const STATUS_ICON: Record<'new' | 'practicing' | 'mastered', string> = {
+  new: '○',
+  practicing: '◐',
+  mastered: '★',
+};
 
 interface SetupProps {
   text: string;
@@ -33,6 +39,8 @@ export default function Setup({ text, onTextChange, onWordsReady, settings, onSe
   const streak = getCurrentStreak();
   const recentQuizzes = getRecentQuizResults();
   const masteredCount = words.length > 0 ? getMasteredSet(words).size : 0;
+  const wordStatuses = words.length > 0 ? getMasteryStatuses(words) : {};
+  const reviewWords = getReviewWords();
   const hasDashboardContent = streak > 0 || recentQuizzes.length > 0 || words.length > 0;
 
   function handleSaveList() {
@@ -77,17 +85,43 @@ export default function Setup({ text, onTextChange, onWordsReady, settings, onSe
               📝 Recent tests: {recentQuizzes.map((q) => `${q.score}/${q.total}`).join(' · ')}
             </p>
           )}
+          {words.length > 0 && (
+            <>
+              <p className="word-status-legend">○ New · ◐ Practicing · ★ Mastered</p>
+              <ul className="word-status-list">
+                {words.map((word) => {
+                  const status = wordStatuses[word] ?? 'new';
+                  return (
+                    <li key={word} className={`word-status-chip status-${status}`} title={status}>
+                      {STATUS_ICON[status]} {word}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
         </div>
       )}
 
       <div className="quick-start">
         <p className="subtitle">Ready to practice this week's words?</p>
-        <button
-          className="play-now-button"
-          onClick={() => onWordsReady(DEFAULT_WORDS, 'practice', {})}
-        >
-          ▶ Play
-        </button>
+        <div className="quick-start-buttons">
+          <button
+            className="play-now-button"
+            onClick={() => onWordsReady(DEFAULT_WORDS, 'practice', {})}
+          >
+            ▶ Play
+          </button>
+          {reviewWords.length > 0 && (
+            <button
+              type="button"
+              className="secondary review-button"
+              onClick={() => onWordsReady(reviewWords, 'practice', {})}
+            >
+              🔁 Review {reviewWords.length} word{reviewWords.length === 1 ? '' : 's'} from past lists
+            </button>
+          )}
+        </div>
       </div>
 
       {savedLists.length > 0 && (

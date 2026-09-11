@@ -162,6 +162,40 @@ p.subtitle {
   color: var(--color-on-surface-variant);
 }
 
+.word-status-legend {
+  margin: 0.75rem 0 0.4rem;
+  font-size: 0.8rem;
+  color: var(--color-on-surface-variant);
+}
+
+.word-status-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.word-status-chip {
+  border-radius: var(--radius-full);
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: var(--color-card-surface);
+  color: var(--color-on-surface-variant);
+}
+
+.word-status-chip.status-practicing {
+  color: var(--color-on-gold);
+  background: var(--color-star-gold);
+}
+
+.word-status-chip.status-mastered {
+  color: #ffffff;
+  background: var(--color-teal);
+}
+
 .quick-start {
   display: flex;
   flex-direction: column;
@@ -175,6 +209,13 @@ p.subtitle {
 
 .quick-start .subtitle {
   margin-top: 0;
+}
+
+.quick-start-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
 }
 
 .play-now-button {
