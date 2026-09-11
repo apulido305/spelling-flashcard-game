@@ -5,20 +5,22 @@ import { deleteList, getSavedLists, saveList, type SavedList } from '../lib/save
 import { getMasteredSet } from '../lib/mastery';
 import { getCurrentStreak } from '../lib/streak';
 import { getRecentQuizResults } from '../lib/quizHistory';
+import { parseWordListText } from '../lib/wordList';
 
 interface SetupProps {
   text: string;
   onTextChange: (text: string) => void;
-  onWordsReady: (words: string[], mode: GameMode) => void;
+  onWordsReady: (words: string[], mode: GameMode, sentences: Record<string, string>) => void;
 }
 
 export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) {
   const [savedLists, setSavedLists] = useState<SavedList[]>(() => getSavedLists());
 
-  const words = text
+  const rawLines = text
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+  const { words, sentences } = parseWordListText(text);
 
   const streak = getCurrentStreak();
   const recentQuizzes = getRecentQuizResults();
@@ -28,7 +30,9 @@ export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) 
   function handleSaveList() {
     const name = window.prompt('Name this list (e.g. "Week 3 words"):');
     if (!name || !name.trim()) return;
-    setSavedLists(saveList(name.trim(), words));
+    // Save the raw lines (not just the parsed words) so any "word |
+    // sentence" entries round-trip correctly when this list is loaded again.
+    setSavedLists(saveList(name.trim(), rawLines));
   }
 
   function handleLoadList(list: SavedList) {
@@ -72,7 +76,7 @@ export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) 
         <p className="subtitle">Ready to practice this week's words?</p>
         <button
           className="play-now-button"
-          onClick={() => onWordsReady(DEFAULT_WORDS, 'practice')}
+          onClick={() => onWordsReady(DEFAULT_WORDS, 'practice', {})}
         >
           ▶ Play
         </button>
@@ -106,20 +110,23 @@ export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) 
         </div>
       )}
 
-      <p className="subtitle">Or paste a new list of words, one per line:</p>
+      <p className="subtitle">
+        Or paste a new list of words, one per line. Add an optional example
+        sentence for tricky words like homophones with "word | sentence":
+      </p>
       <textarea
         value={text}
         onChange={(e) => onTextChange(e.target.value)}
-        placeholder={'example\nnecessary\nrhythm\n...'}
+        placeholder={'example\nnecessary\nthere | The book is over there.'}
       />
       <div className="button-row">
-        <button onClick={() => onWordsReady(words, 'practice')} disabled={words.length === 0}>
+        <button onClick={() => onWordsReady(words, 'practice', sentences)} disabled={words.length === 0}>
           Start Game
         </button>
         <button
           type="button"
           className="secondary"
-          onClick={() => onWordsReady(words, 'quiz')}
+          onClick={() => onWordsReady(words, 'quiz', sentences)}
           disabled={words.length === 0}
         >
           📝 Take the Test

@@ -13,6 +13,7 @@ interface SessionState {
   screen: Screen;
   setupText: string;
   words: string[];
+  sentences: Record<string, string>;
   game: GameState | null;
   finalScore: number;
   finalMissed: string[];
@@ -26,6 +27,7 @@ function defaultSession(): SessionState {
     screen: 'setup',
     setupText: '',
     words: [],
+    sentences: {},
     game: null,
     finalScore: 0,
     finalMissed: [],
@@ -54,7 +56,7 @@ export default function App() {
     saveJSON(STORAGE_KEY, session);
   }, [session]);
 
-  const { screen, setupText, words, game, finalScore, finalMissed, finalNewlyMastered } = session;
+  const { screen, setupText, words, sentences, game, finalScore, finalMissed, finalNewlyMastered } = session;
 
   function handleNewList() {
     clearJSON(STORAGE_KEY);
@@ -67,11 +69,12 @@ export default function App() {
         <Setup
           text={setupText}
           onTextChange={(text) => setSession((s) => ({ ...s, setupText: text }))}
-          onWordsReady={(list, mode) =>
+          onWordsReady={(list, mode, listSentences) =>
             setSession((s) => ({
               ...s,
               screen: 'play',
               words: list,
+              sentences: listSentences,
               game: freshGame(list, mode),
             }))
           }
@@ -81,6 +84,7 @@ export default function App() {
       {screen === 'play' && game && (
         <Play
           game={game}
+          sentences={sentences}
           onGameChange={(g) => setSession((s) => ({ ...s, game: g }))}
           onFinish={(score, missed) => {
             // Quiz mode is a readiness check, not a practice session - it

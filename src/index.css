@@ -293,6 +293,14 @@ button.secondary:hover:not(:disabled) {
   text-align: center;
 }
 
+.sentence-note {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6b6459;
+  margin: 0;
+  text-align: center;
+}
+
 .play-form {
   display: flex;
   gap: 0.75rem;
