@@ -498,6 +498,89 @@ test('Progress dashboard: hidden when empty, reflects streak/mastery/quiz histor
   await context.close();
 });
 
+test('Wrong-answer feedback explains the specific mistake, not just the reveal', async (browser) => {
+  const { context, page, pageErrors } = await newPage(browser);
+
+  // A single missing letter gets a specific, actionable explanation.
+  await startGame(page, ['house']);
+  await page.fill('input[type="text"]', 'hous');
+  await page.click('button[type="submit"]');
+  await page.waitForSelector('.feedback.incorrect', { timeout: 3000 });
+  let feedbackText = await page.locator('.feedback').innerText();
+  assert(
+    feedbackText.includes('missing a letter') && feedbackText.includes('"house"'),
+    `Expected a specific missing-letter explanation for "hous", got: "${feedbackText}"`
+  );
+  await answerCorrectly(page, 'house');
+  await page.waitForSelector('text=Session Complete!', { timeout: 5000 });
+  await page.click('.home-button');
+  await page.waitForSelector('text=Ready to practice', { timeout: 5000 });
+
+  // A guess too far off to classify still falls back to the plain reveal,
+  // rather than forcing a confusing explanation onto an unrelated guess.
+  await startGame(page, ['cat']);
+  await page.fill('input[type="text"]', 'xxWRONGxx');
+  await page.click('button[type="submit"]');
+  await page.waitForSelector('.feedback.incorrect', { timeout: 3000 });
+  feedbackText = await page.locator('.feedback').innerText();
+  assert(
+    feedbackText === 'Not quite — it\'s spelled "cat"',
+    `Expected the generic fallback message for a far-off guess, got: "${feedbackText}"`
+  );
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
+test('Word mastery status chips and cross-week Review button reflect seeded mastery data', async (browser) => {
+  const { context, page, pageErrors } = await newPage(browser);
+
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'spelling-flashcard:mastery',
+      JSON.stringify({
+        necessary: { streak: 1, lastPracticedDate: '2024-01-01', masteredAt: null },
+        apple: { streak: 3, lastPracticedDate: '2024-01-03', masteredAt: '2024-01-03' },
+        banana: { streak: 0, lastPracticedDate: null, masteredAt: null },
+      })
+    );
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('text=Ready to practice', { timeout: 10000 });
+
+  // "necessary" is mid-progress from a list that isn't even in the textarea
+  // right now - it must still be offered for cross-week review.
+  const reviewButton = page.locator('button.review-button');
+  assert(await reviewButton.isVisible(), 'Review button should appear when a word is mid-progress from a past list');
+  assert(
+    (await reviewButton.innerText()).includes('1 word'),
+    `Expected exactly 1 word to review, got: "${await reviewButton.innerText()}"`
+  );
+
+  await page.fill('textarea', 'apple\nbanana\ncat');
+  const chips = await page.locator('.word-status-chip').allInnerTexts();
+  assert(
+    chips.some((c) => c.includes('★') && c.includes('apple')),
+    `Expected apple to show as mastered, got: ${JSON.stringify(chips)}`
+  );
+  assert(
+    chips.some((c) => c.includes('○') && c.includes('banana')),
+    `Expected banana (0 streak) to show as new, got: ${JSON.stringify(chips)}`
+  );
+  assert(
+    chips.some((c) => c.includes('○') && c.includes('cat')),
+    `Expected an untracked word "cat" to show as new, got: ${JSON.stringify(chips)}`
+  );
+
+  await reviewButton.click();
+  await page.waitForSelector('.play-definition', { timeout: 5000 });
+  const spoken = await lastSpoken(page);
+  assert(spoken === 'necessary', `Expected the Review session to start with "necessary", got: "${spoken}"`);
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 test('Example sentences: optional "word | sentence" syntax, spoken format, and save/load round-trip', async (browser) => {
   const { context, page, pageErrors } = await newPage(browser);
 

@@ -54,7 +54,10 @@ function scoreVoice(voice: SpeechSynthesisVoice): number {
   if (/eloquence/.test(haystack)) score -= 10; // notably robotic legacy engine
   if (voice.lang === 'en-US') score += 3;
   else if (voice.lang.startsWith('en')) score += 1;
-  if (!voice.localService) score += 1; // cloud voices (e.g. Edge's neural voices) tend to sound better
+  // Slight edge to on-device voices over an equally-scored cloud voice — a
+  // cloud voice needs network to synthesize speech, which risks a session
+  // going silent on a flaky school Wi-Fi connection.
+  if (voice.localService) score += 1;
   return score;
 }
 
