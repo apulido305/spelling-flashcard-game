@@ -1,0 +1,25 @@
+name: Smoke Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Start preview server
+        run: |
+          nohup npx vite preview --port 4173 --strictPort > preview.log 2>&1 &
+          timeout 30 bash -c 'until curl -sf http://localhost:4173/spelling-flashcard-game/ >/dev/null; do sleep 1; done'
+      - run: node tests/smoke.mjs
+        env:
+          SMOKE_URL: http://localhost:4173/spelling-flashcard-game/
