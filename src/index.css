@@ -3,6 +3,42 @@
   color-scheme: light;
 }
 
+/* Accessibility modes - applied to <html> (not just the app card) so
+   rem-based sizing throughout the whole app scales correctly, since rem is
+   always relative to the root element's font-size. */
+html.large-text {
+  font-size: 125%;
+}
+
+html.dyslexia-font,
+html.dyslexia-font * {
+  font-family: 'Lexend', 'Segoe UI', system-ui, sans-serif !important;
+}
+
+html.high-contrast body {
+  background: #ffffff;
+}
+
+html.high-contrast .app-card {
+  box-shadow: 0 0 0 3px #000000;
+}
+
+html.high-contrast,
+html.high-contrast * {
+  color: #000000 !important;
+}
+
+html.high-contrast button {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border: 2px solid #000000;
+}
+
+html.high-contrast button:disabled {
+  background: #555555 !important;
+  color: #ffffff !important;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -179,6 +215,8 @@ textarea {
 }
 
 button {
+  appearance: none;
+  -webkit-appearance: none;
   font-family: inherit;
   font-size: 1.1rem;
   font-weight: 700;
@@ -375,4 +413,48 @@ button.secondary:hover:not(:disabled) {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1.5rem;
+}
+
+/* Setup screen: settings */
+.settings {
+  margin-top: 1.5rem;
+}
+
+.settings summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #5a3ea8;
+  padding: 0.5rem 0;
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #f5f1e8;
+  border-radius: 12px;
+  margin-top: 0.5rem;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 600;
+}
+
+.settings-rate-row {
+  flex-wrap: wrap;
+}
+
+.settings-rate-row input[type='range'] {
+  flex: 1;
+  min-width: 120px;
+}
+
+.settings-note {
+  font-size: 0.8rem;
+  color: #6b6459;
+  margin: 0;
 }

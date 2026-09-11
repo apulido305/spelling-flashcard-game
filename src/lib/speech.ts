@@ -1,4 +1,5 @@
 import { syllabify } from './phonetics';
+import { getAccessibilitySettings } from './accessibility';
 
 export function isSpeechSupported(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window;
@@ -97,7 +98,17 @@ function speakText(text: string, standardVoiceRate: number) {
     utterance.pitch = 1;
 
     const voice = pickBestVoice();
-    const rate = voice ? (isHighQualityVoice(voice) ? 1 : standardVoiceRate) : standardVoiceRate;
+    // The user-adjustable rate control only ever applies to standard/compact
+    // voices. High-quality voices stay hardcoded to their native rate (1) no
+    // matter what the slider says — overriding that is exactly what caused
+    // the iOS distortion bug fixed earlier, and this preference control must
+    // never be allowed to reintroduce it.
+    const { rateMultiplier } = getAccessibilitySettings();
+    const rate = voice
+      ? isHighQualityVoice(voice)
+        ? 1
+        : standardVoiceRate * rateMultiplier
+      : standardVoiceRate * rateMultiplier;
     if (voice) utterance.voice = voice;
     utterance.rate = rate;
 
