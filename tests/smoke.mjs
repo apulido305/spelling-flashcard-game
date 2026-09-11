@@ -179,6 +179,38 @@ test('Spell it costs points and flags review; Sound it out stays free', async (b
   await context.close();
 });
 
+test('Sound it out: accurate syllable boundaries (digraphs intact, short words get a real split)', async (browser) => {
+  const { context, page, pageErrors } = await newPage(browser);
+  const words = ['father', 'cat'];
+  await startGame(page, words);
+
+  for (let i = 0; i < words.length; i++) {
+    const word = await lastSpoken(page);
+    await page.click('button:has-text("Sound it out")');
+    await page.waitForTimeout(150);
+    const spoken = await lastSpoken(page);
+
+    if (word === 'father') {
+      // The old heuristic split the "th" digraph apart (fat-her); the real
+      // hyphenation algorithm keeps it intact.
+      assert(spoken === 'fa, ther', `Expected "father" to split as "fa, ther" (digraph intact), got: "${spoken}"`);
+    } else if (word === 'cat') {
+      // Hyphenation algorithms decline to split short/monosyllabic words -
+      // this must fall back to a real 2-part onset/rime split, not come
+      // back as a single unsplit chunk indistinguishable from Hear it again.
+      assert(spoken === 'c, at', `Expected "cat" to fall back to a real 2-part split, got: "${spoken}"`);
+    } else {
+      throw new Error(`Unexpected word in queue: "${word}"`);
+    }
+
+    await answerCorrectly(page, word);
+  }
+
+  await page.waitForSelector('text=Session Complete!', { timeout: 5000 });
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 test('Session completion, Play Again, Restart, and New List all work', async (browser) => {
   const { context, page, pageErrors } = await newPage(browser);
   await startGame(page, ['cat', 'dog']);
