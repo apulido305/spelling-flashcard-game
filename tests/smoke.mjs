@@ -411,6 +411,61 @@ test('Quiz mode: single attempt, no hints, correct/total scoring, and does not a
   await context.close();
 });
 
+test('Progress dashboard: hidden when empty, reflects streak/mastery/quiz history', async (browser) => {
+  const { context, page, pageErrors } = await newPage(browser);
+
+  // Nothing practiced yet, nothing typed - dashboard should not render at all.
+  assert(
+    (await page.locator('.dashboard').count()) === 0,
+    'Dashboard should be hidden with no streak, no quiz history, and no words typed'
+  );
+
+  await startGame(page, ['lemon', 'melon']);
+  for (let i = 0; i < 2; i++) {
+    await answerCorrectly(page);
+  }
+  await page.waitForSelector('text=Session Complete!', { timeout: 5000 });
+  await page.click('button:has-text("New List")');
+  await page.waitForSelector('text=Ready to practice', { timeout: 5000 });
+
+  let dashboardText = await page.locator('.dashboard').innerText();
+  assert(dashboardText.includes('1 day in a row'), `Expected a 1-day streak after one session, got: "${dashboardText}"`);
+
+  await page.fill('textarea', 'lemon\nmelon');
+  dashboardText = await page.locator('.dashboard').innerText();
+  assert(
+    dashboardText.includes('0 / 2 words mastered'),
+    `Expected "0 / 2 words mastered" after only 1 clean day (mastery needs 3), got: "${dashboardText}"`
+  );
+
+  // Mastered count is reactive to whatever's currently in the textarea.
+  await page.fill('textarea', 'lemon\nmelon\ngrape');
+  dashboardText = await page.locator('.dashboard').innerText();
+  assert(
+    dashboardText.includes('0 / 3 words mastered'),
+    `Expected the denominator to track the current textarea content, got: "${dashboardText}"`
+  );
+
+  await page.click('button:has-text("Take the Test")');
+  await page.waitForSelector('.play-definition', { timeout: 5000 });
+  for (let i = 0; i < 3; i++) {
+    const word = await lastSpoken(page);
+    await page.fill('input[type="text"]', word);
+    await page.click('button[type="submit"]');
+    await page.waitForSelector('.feedback', { timeout: 3000 });
+    await page.waitForSelector('.feedback', { state: 'detached', timeout: 3000 }).catch(() => {});
+  }
+  await page.waitForSelector('text=Test Complete!', { timeout: 5000 });
+  await page.click('button:has-text("New List")');
+  await page.waitForSelector('text=Ready to practice', { timeout: 5000 });
+
+  dashboardText = await page.locator('.dashboard').innerText();
+  assert(dashboardText.includes('Recent tests: 3/3'), `Expected "Recent tests: 3/3", got: "${dashboardText}"`);
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 async function main() {
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
   let failures = 0;
