@@ -667,6 +667,51 @@ test('Accessibility settings: rate multiplier never touches high-quality voices,
   await context.close();
 });
 
+test('Persistent Home button: hidden on Setup, present on Play/Summary, and recovers a corrupted session', async (browser) => {
+  const { context, page, pageErrors } = await newPage(browser);
+
+  assert(
+    (await page.locator('.home-button').count()) === 0,
+    'Home button should not render on the Setup screen itself'
+  );
+
+  await startGame(page, ['cat', 'dog']);
+  assert(await page.locator('.home-button').isVisible(), 'Home button should be visible during Play');
+  await page.click('.home-button');
+  await page.waitForSelector('text=Ready to practice', { timeout: 5000 });
+
+  // Simulate the reported bug directly: a persisted session stuck on the
+  // Play screen with a null/corrupted game object rendered nothing at all
+  // (screen === 'play' && game required both, so a falsy game left a blank
+  // .app-card with zero buttons - the only escape was clearing storage via
+  // a private window). The always-rendered Home bar sits outside that
+  // conditional, so it must survive even here.
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'spelling-flashcard:session',
+      JSON.stringify({
+        screen: 'play',
+        setupText: '',
+        words: ['cat'],
+        sentences: {},
+        game: null,
+        finalScore: 0,
+        finalMissed: [],
+        finalNewlyMastered: [],
+      })
+    );
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.home-button', { timeout: 5000 });
+  await page.click('.home-button');
+  await page.waitForSelector('text=Ready to practice', { timeout: 5000 });
+  const textareaValue = await page.locator('textarea').inputValue();
+  assert(textareaValue === '', 'Home should fully reset the corrupted session back to a clean Setup screen');
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 async function main() {
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
   let failures = 0;
