@@ -75,6 +75,18 @@ export default function App() {
     setSession(defaultSession());
   }
 
+  // A persistent escape hatch rendered outside every screen's own JSX, so
+  // it's reachable even if a screen fails to render anything (e.g. a
+  // corrupted/partial persisted session leaves `game` null while
+  // screen === 'play') - previously the only way back to Setup in that
+  // state was to open a private window and get a fresh, empty localStorage.
+  function handleHomeClick() {
+    if (screen === 'play' && !window.confirm('Return to the home screen? Your current progress will be lost.')) {
+      return;
+    }
+    handleNewList();
+  }
+
   function handleSettingsChange(next: typeof settings) {
     setSettings(next);
     saveAccessibilitySettings(next);
@@ -82,6 +94,14 @@ export default function App() {
 
   return (
     <div className="app-card">
+      {screen !== 'setup' && (
+        <div className="home-bar">
+          <button type="button" className="secondary home-button" onClick={handleHomeClick}>
+            🏠 Home
+          </button>
+        </div>
+      )}
+
       {screen === 'setup' && (
         <Setup
           text={setupText}
