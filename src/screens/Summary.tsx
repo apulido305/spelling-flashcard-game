@@ -1,6 +1,7 @@
 interface SummaryProps {
   score: number;
   missed: string[];
+  newlyMastered: string[];
   onPlayAgain: () => void;
   onNewList: () => void;
 }
@@ -8,6 +9,7 @@ interface SummaryProps {
 export default function Summary({
   score,
   missed,
+  newlyMastered,
   onPlayAgain,
   onNewList,
 }: SummaryProps) {
@@ -15,6 +17,13 @@ export default function Summary({
     <>
       <h1>Session Complete!</h1>
       <div className="summary-score">{score} points</div>
+
+      {newlyMastered.length > 0 && (
+        <p className="newly-mastered">
+          🌟 {newlyMastered.length === 1 ? 'Word mastered' : `${newlyMastered.length} words mastered`}:{' '}
+          {newlyMastered.join(', ')}!
+        </p>
+      )}
 
       <h2>Words to Review</h2>
       {missed.length > 0 ? (

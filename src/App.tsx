@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Screen, GameState } from './types';
-import { initQueue } from './lib/gameLogic';
+import { initQueueWithMastery } from './lib/gameLogic';
 import { loadJSON, saveJSON, clearJSON } from './lib/storage';
+import { getMasteredSet, recordSessionResults } from './lib/mastery';
 import Setup from './screens/Setup';
 import Play from './screens/Play';
 import Summary from './screens/Summary';
@@ -13,6 +14,7 @@ interface SessionState {
   game: GameState | null;
   finalScore: number;
   finalMissed: string[];
+  finalNewlyMastered: string[];
 }
 
 const STORAGE_KEY = 'session';
@@ -25,11 +27,19 @@ function defaultSession(): SessionState {
     game: null,
     finalScore: 0,
     finalMissed: [],
+    finalNewlyMastered: [],
   };
 }
 
 function freshGame(words: string[]): GameState {
-  return { queue: initQueue(words), score: 0, missCounts: {}, usedHelp: {}, wordsCompleted: 0 };
+  const mastered = getMasteredSet(words);
+  return {
+    queue: initQueueWithMastery(words, mastered),
+    score: 0,
+    missCounts: {},
+    usedHelp: {},
+    wordsCompleted: 0,
+  };
 }
 
 export default function App() {
@@ -41,7 +51,7 @@ export default function App() {
     saveJSON(STORAGE_KEY, session);
   }, [session]);
 
-  const { screen, setupText, words, game, finalScore, finalMissed } = session;
+  const { screen, setupText, words, game, finalScore, finalMissed, finalNewlyMastered } = session;
 
   function handleNewList() {
     clearJSON(STORAGE_KEY);
@@ -69,9 +79,16 @@ export default function App() {
         <Play
           game={game}
           onGameChange={(g) => setSession((s) => ({ ...s, game: g }))}
-          onFinish={(score, missed) =>
-            setSession((s) => ({ ...s, screen: 'summary', finalScore: score, finalMissed: missed }))
-          }
+          onFinish={(score, missed) => {
+            const newlyMastered = recordSessionResults(words, missed);
+            setSession((s) => ({
+              ...s,
+              screen: 'summary',
+              finalScore: score,
+              finalMissed: missed,
+              finalNewlyMastered: newlyMastered,
+            }));
+          }}
           onRestart={() => setSession((s) => ({ ...s, game: freshGame(words) }))}
           onNewList={handleNewList}
         />
@@ -81,6 +98,7 @@ export default function App() {
         <Summary
           score={finalScore}
           missed={finalMissed}
+          newlyMastered={finalNewlyMastered}
           onPlayAgain={() =>
             setSession((s) => ({ ...s, screen: 'play', game: freshGame(words) }))
           }

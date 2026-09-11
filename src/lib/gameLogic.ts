@@ -10,6 +10,15 @@ export function initQueue(words: string[]): string[] {
   return shuffled;
 }
 
+// Front-loads not-yet-mastered words and pushes already-mastered ones later
+// in the queue, without dropping them entirely — everyone still gets
+// practiced, but the words that actually need attention come first.
+export function initQueueWithMastery(words: string[], masteredWords: Set<string>): string[] {
+  const notMastered = words.filter((word) => !masteredWords.has(word));
+  const mastered = words.filter((word) => masteredWords.has(word));
+  return [...initQueue(notMastered), ...initQueue(mastered)];
+}
+
 export function requeue(remainingQueue: string[], word: string): string[] {
   const offset = Math.floor(
     Math.random() * (MAX_REQUEUE_OFFSET - MIN_REQUEUE_OFFSET + 1)

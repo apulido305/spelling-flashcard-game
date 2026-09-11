@@ -243,6 +243,98 @@ test('Saved lists: save, persist across reload, load, and delete', async (browse
   await context.close();
 });
 
+test('Mastery tracking: masters after 3 separate clean days, biases future queues', async (browser) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on('pageerror', (err) => pageErrors.push(String(err)));
+  page.on('dialog', async (dialog) => {
+    await dialog.accept(dialog.type() === 'prompt' ? 'x' : undefined);
+  });
+  await page.addInitScript(() => {
+    window.__spoken = [];
+    if (window.speechSynthesis) {
+      window.speechSynthesis.speak = (utterance) => window.__spoken.push(utterance.text);
+    }
+  });
+
+  // setFixedTime only overrides Date.now()/new Date() - real timers (the
+  // correct/incorrect feedback delays, the speech cancel/speak beat) keep
+  // running normally, so gameplay waits below behave exactly as in every
+  // other test. This lets us simulate separate calendar days without
+  // actually waiting real time.
+  await page.clock.setFixedTime(new Date('2024-01-01T09:00:00'));
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('text=Ready to practice', { timeout: 10000 });
+
+  const words = ['mango', 'kiwi'];
+
+  async function playOneCleanSession() {
+    await page.fill('textarea', words.join('\n'));
+    await page.click('button:has-text("Start Game")');
+    await page.waitForSelector('.play-definition', { timeout: 5000 });
+    for (let i = 0; i < words.length; i++) {
+      await answerCorrectly(page);
+    }
+    await page.waitForSelector('text=Session Complete!', { timeout: 5000 });
+  }
+
+  async function backToSetup() {
+    await page.click('button:has-text("New List")');
+    await page.waitForSelector('text=Ready to practice', { timeout: 5000 });
+  }
+
+  // Day 1, first session: clean, but only 1 day in - not mastered yet.
+  await playOneCleanSession();
+  assert(
+    !(await page.locator('.newly-mastered').isVisible().catch(() => false)),
+    'Should not be mastered after only 1 clean day'
+  );
+  await backToSetup();
+
+  // Day 1, second session (same calendar day): must NOT double-count -
+  // spaced repetition requires separation across days, not just repeated
+  // attempts within one sitting.
+  await playOneCleanSession();
+  assert(
+    !(await page.locator('.newly-mastered').isVisible().catch(() => false)),
+    'A same-day repeat must not advance the mastery streak'
+  );
+  await backToSetup();
+
+  // Day 2: second distinct clean day.
+  await page.clock.setFixedTime(new Date('2024-01-02T09:00:00'));
+  await playOneCleanSession();
+  assert(
+    !(await page.locator('.newly-mastered').isVisible().catch(() => false)),
+    'Should not be mastered after only 2 clean days'
+  );
+  await backToSetup();
+
+  // Day 3: third distinct clean day - mastery should trigger for both words.
+  await page.clock.setFixedTime(new Date('2024-01-03T09:00:00'));
+  await playOneCleanSession();
+  const newlyMasteredText = await page.locator('.newly-mastered').innerText();
+  assert(
+    newlyMasteredText.includes('mango') && newlyMasteredText.includes('kiwi'),
+    `Expected both words newly mastered after 3 clean days, got: "${newlyMasteredText}"`
+  );
+  await backToSetup();
+
+  // Queue biasing: mix the now-mastered words with a brand-new one - the
+  // not-yet-mastered word should always surface first.
+  await page.fill('textarea', ['papaya', ...words].join('\n'));
+  await page.click('button:has-text("Start Game")');
+  await page.waitForSelector('.play-definition', { timeout: 5000 });
+  const firstWord = await lastSpoken(page);
+  assert(firstWord === 'papaya', `Expected the not-yet-mastered word first in the queue, got: "${firstWord}"`);
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 async function main() {
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
   let failures = 0;

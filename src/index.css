@@ -297,6 +297,16 @@ button.secondary:hover:not(:disabled) {
   margin: 1rem 0;
 }
 
+.newly-mastered {
+  background: #fff8e1;
+  color: #8a6d00;
+  font-weight: 700;
+  text-align: center;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  margin: 0 0 1rem;
+}
+
 .missed-list {
   list-style: none;
   padding: 0;
