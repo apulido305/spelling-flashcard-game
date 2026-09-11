@@ -335,6 +335,82 @@ test('Mastery tracking: masters after 3 separate clean days, biases future queue
   await context.close();
 });
 
+test('Quiz mode: single attempt, no hints, correct/total scoring, and does not affect mastery', async (browser) => {
+  const { context, page, pageErrors } = await newPage(browser);
+
+  const words = ['quartz', 'zephyr', 'onyx'];
+  await page.fill('textarea', words.join('\n'));
+
+  const testBtn = page.locator('button:has-text("Take the Test")');
+  assert(await testBtn.isVisible(), '"Take the Test" button should be visible on Setup');
+  await testBtn.click();
+  await page.waitForSelector('.play-definition', { timeout: 5000 });
+
+  assert(
+    !(await page.locator('button:has-text("Spell it")').isVisible().catch(() => false)),
+    'Spell it should be hidden in quiz mode'
+  );
+  assert(
+    !(await page.locator('button:has-text("Sound it out")').isVisible().catch(() => false)),
+    'Sound it out should be hidden in quiz mode'
+  );
+
+  // Word 1: correct - plain "Correct!" feedback, no points language.
+  let word = await lastSpoken(page);
+  await page.fill('input[type="text"]', word);
+  await page.click('button[type="submit"]');
+  await page.waitForSelector('.feedback.correct', { timeout: 3000 });
+  let feedbackText = await page.locator('.feedback').innerText();
+  assert(feedbackText === 'Correct!', `Expected plain "Correct!" in quiz mode, got: "${feedbackText}"`);
+  await page.waitForSelector('.feedback', { state: 'detached', timeout: 3000 }).catch(() => {});
+  let progress = await page.locator('.play-progress').innerText();
+  assert(progress.includes('Correct: 1'), `Expected "Correct: 1", got: ${progress}`);
+
+  // Word 2: miss it - one attempt only, must NOT be requeued.
+  const missedWord = await lastSpoken(page);
+  await page.fill('input[type="text"]', 'xxWRONGxx');
+  await page.click('button[type="submit"]');
+  await page.waitForSelector('.feedback.incorrect', { timeout: 3000 });
+  feedbackText = await page.locator('.feedback').innerText();
+  assert(feedbackText.includes(missedWord), `Expected feedback to reveal "${missedWord}", got: ${feedbackText}`);
+  await page.waitForSelector('.feedback', { state: 'detached', timeout: 3000 }).catch(() => {});
+  progress = await page.locator('.play-progress').innerText();
+  assert(progress.includes('0 left in queue'), `Missed word should not be requeued, got: ${progress}`);
+
+  // Word 3: correct, finishes the quiz.
+  word = await lastSpoken(page);
+  await page.fill('input[type="text"]', word);
+  await page.click('button[type="submit"]');
+  await page.waitForSelector('text=Test Complete!', { timeout: 5000 });
+
+  const scoreText = await page.locator('.summary-score').innerText();
+  assert(scoreText.includes('2 / 3'), `Expected "2 / 3 correct", got: "${scoreText}"`);
+  const heading = await page.locator('h2').innerText();
+  assert(heading.includes('Study These'), `Expected quiz-framed heading, got: "${heading}"`);
+  const missedListItems = await page.locator('.missed-list li').allInnerTexts();
+  assert(
+    missedListItems.length === 1 && missedListItems[0].toLowerCase() === missedWord.toLowerCase(),
+    `Expected review list to contain only "${missedWord}", got: ${JSON.stringify(missedListItems)}`
+  );
+  assert(
+    await page.locator('button:has-text("Retake the Test")').isVisible(),
+    'Expected "Retake the Test" button on the quiz summary'
+  );
+
+  // Quiz mode must not touch mastery data - even a clean quiz shouldn't
+  // silently build a practice streak.
+  const masteryState = await page.evaluate(() => localStorage.getItem('spelling-flashcard:mastery'));
+  if (masteryState) {
+    const parsed = JSON.parse(masteryState);
+    for (const w of words) {
+      assert(!parsed[w], `Quiz mode should not write mastery data for "${w}", found: ${JSON.stringify(parsed[w])}`);
+    }
+  }
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 async function main() {
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
   let failures = 0;

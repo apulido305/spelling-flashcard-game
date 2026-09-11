@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import type { GameMode } from '../types';
 import { DEFAULT_WORDS } from '../lib/defaultWords';
 import { deleteList, getSavedLists, saveList, type SavedList } from '../lib/savedLists';
 
 interface SetupProps {
   text: string;
   onTextChange: (text: string) => void;
-  onWordsReady: (words: string[]) => void;
+  onWordsReady: (words: string[], mode: GameMode) => void;
 }
 
 export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) {
@@ -40,7 +41,7 @@ export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) 
         <p className="subtitle">Ready to practice this week's words?</p>
         <button
           className="play-now-button"
-          onClick={() => onWordsReady(DEFAULT_WORDS)}
+          onClick={() => onWordsReady(DEFAULT_WORDS, 'practice')}
         >
           ▶ Play
         </button>
@@ -81,8 +82,16 @@ export default function Setup({ text, onTextChange, onWordsReady }: SetupProps) 
         placeholder={'example\nnecessary\nrhythm\n...'}
       />
       <div className="button-row">
-        <button onClick={() => onWordsReady(words)} disabled={words.length === 0}>
+        <button onClick={() => onWordsReady(words, 'practice')} disabled={words.length === 0}>
           Start Game
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => onWordsReady(words, 'quiz')}
+          disabled={words.length === 0}
+        >
+          📝 Take the Test
         </button>
         <button
           type="button"

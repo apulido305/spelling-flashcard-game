@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Screen, GameState } from './types';
+import type { Screen, GameState, GameMode } from './types';
 import { initQueueWithMastery } from './lib/gameLogic';
 import { loadJSON, saveJSON, clearJSON } from './lib/storage';
 import { getMasteredSet, recordSessionResults } from './lib/mastery';
@@ -31,9 +31,10 @@ function defaultSession(): SessionState {
   };
 }
 
-function freshGame(words: string[]): GameState {
+function freshGame(words: string[], mode: GameMode): GameState {
   const mastered = getMasteredSet(words);
   return {
+    mode,
     queue: initQueueWithMastery(words, mastered),
     score: 0,
     missCounts: {},
@@ -64,12 +65,12 @@ export default function App() {
         <Setup
           text={setupText}
           onTextChange={(text) => setSession((s) => ({ ...s, setupText: text }))}
-          onWordsReady={(list) =>
+          onWordsReady={(list, mode) =>
             setSession((s) => ({
               ...s,
               screen: 'play',
               words: list,
-              game: freshGame(list),
+              game: freshGame(list, mode),
             }))
           }
         />
@@ -80,7 +81,12 @@ export default function App() {
           game={game}
           onGameChange={(g) => setSession((s) => ({ ...s, game: g }))}
           onFinish={(score, missed) => {
-            const newlyMastered = recordSessionResults(words, missed);
+            // Quiz mode is a readiness check, not a practice session - it
+            // deliberately doesn't feed the mastery streak, so a stressful
+            // no-hints test attempt can't be conflated with (or accidentally
+            // fast-track) the calmer practice-mode mastery signal.
+            const newlyMastered =
+              game.mode === 'practice' ? recordSessionResults(words, missed) : [];
             setSession((s) => ({
               ...s,
               screen: 'summary',
@@ -89,18 +95,20 @@ export default function App() {
               finalNewlyMastered: newlyMastered,
             }));
           }}
-          onRestart={() => setSession((s) => ({ ...s, game: freshGame(words) }))}
+          onRestart={() => setSession((s) => ({ ...s, game: freshGame(words, game.mode) }))}
           onNewList={handleNewList}
         />
       )}
 
       {screen === 'summary' && (
         <Summary
+          mode={game?.mode ?? 'practice'}
           score={finalScore}
+          totalWords={words.length}
           missed={finalMissed}
           newlyMastered={finalNewlyMastered}
           onPlayAgain={() =>
-            setSession((s) => ({ ...s, screen: 'play', game: freshGame(words) }))
+            setSession((s) => ({ ...s, screen: 'play', game: freshGame(words, game?.mode ?? 'practice') }))
           }
           onNewList={handleNewList}
         />

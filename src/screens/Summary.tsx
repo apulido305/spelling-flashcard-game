@@ -1,5 +1,9 @@
+import type { GameMode } from '../types';
+
 interface SummaryProps {
+  mode: GameMode;
   score: number;
+  totalWords: number;
   missed: string[];
   newlyMastered: string[];
   onPlayAgain: () => void;
@@ -7,16 +11,22 @@ interface SummaryProps {
 }
 
 export default function Summary({
+  mode,
   score,
+  totalWords,
   missed,
   newlyMastered,
   onPlayAgain,
   onNewList,
 }: SummaryProps) {
+  const isQuiz = mode === 'quiz';
+
   return (
     <>
-      <h1>Session Complete!</h1>
-      <div className="summary-score">{score} points</div>
+      <h1>{isQuiz ? 'Test Complete!' : 'Session Complete!'}</h1>
+      <div className="summary-score">
+        {isQuiz ? `${score} / ${totalWords} correct` : `${score} points`}
+      </div>
 
       {newlyMastered.length > 0 && (
         <p className="newly-mastered">
@@ -25,7 +35,7 @@ export default function Summary({
         </p>
       )}
 
-      <h2>Words to Review</h2>
+      <h2>{isQuiz ? 'Study These Before Your Real Test' : 'Words to Review'}</h2>
       {missed.length > 0 ? (
         <ul className="missed-list">
           {missed.map((word) => (
@@ -33,11 +43,15 @@ export default function Summary({
           ))}
         </ul>
       ) : (
-        <p className="no-missed">No misses — every word was correct on the first try!</p>
+        <p className="no-missed">
+          {isQuiz
+            ? "Every word correct — you're ready!"
+            : 'No misses — every word was correct on the first try!'}
+        </p>
       )}
 
       <div className="button-row">
-        <button onClick={onPlayAgain}>Play Again</button>
+        <button onClick={onPlayAgain}>{isQuiz ? 'Retake the Test' : 'Play Again'}</button>
         <button className="secondary" onClick={onNewList}>
           New List
         </button>
