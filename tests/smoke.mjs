@@ -795,6 +795,38 @@ test('Persistent Home button: hidden on Setup, present on Play/Summary, and reco
   await context.close();
 });
 
+test('Stale cached index.html referencing a purged bundle self-recovers via one automatic reload', async (browser) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on('pageerror', (err) => pageErrors.push(String(err)));
+
+  // Simulates a real deploy-cadence bug: an old cached index.html can
+  // outlive the deploy it came from, and each new deploy fully replaces the
+  // hashed JS bundle - so the cached page's <script src> 404s and the app
+  // silently renders nothing. Matches both the dev entry (/src/main.tsx)
+  // and the production hashed bundle (assets/index-HASH.js) so this test
+  // means something against either SMOKE_URL target.
+  let requestCount = 0;
+  await page.route(/\/(src\/main\.tsx|assets\/index-[^/?]+\.js)(\?.*)?$/, async (route) => {
+    requestCount++;
+    if (requestCount === 1) {
+      await route.fulfill({ status: 404, body: 'Not Found' });
+    } else {
+      await route.continue();
+    }
+  });
+
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  // index.html's inline recovery script reloads once on the failed script
+  // load - the retry should actually mount the app rather than staying blank.
+  await page.waitForSelector('text=Ready to practice', { timeout: 10000 });
+  assert(requestCount === 2, `Expected the failed request plus exactly one automatic retry, got ${requestCount} requests`);
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 async function main() {
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
   let failures = 0;

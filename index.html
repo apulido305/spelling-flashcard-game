@@ -4,6 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spelling Flashcards</title>
+    <script>
+      (function () {
+        // A cached copy of this index.html (especially aggressive on an iOS
+        // "Add to Home Screen" shortcut) can outlive the deploy it came
+        // from - once a later deploy replaces the hashed JS bundle it
+        // references, the script tag below 404s and the page silently
+        // renders nothing, with no visible error. Recover automatically
+        // instead of leaving a permanent blank screen: reload once.
+        // sessionStorage (cleared per tab session) guards against a reload
+        // loop if this is a real network outage rather than a stale
+        // reference.
+        var RELOAD_FLAG = 'spelling-flashcard:reloaded-for-stale-bundle';
+        window.addEventListener(
+          'error',
+          function (event) {
+            if (event.target && event.target.tagName === 'SCRIPT' && !sessionStorage.getItem(RELOAD_FLAG)) {
+              sessionStorage.setItem(RELOAD_FLAG, '1');
+              location.reload();
+            }
+          },
+          true
+        );
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
