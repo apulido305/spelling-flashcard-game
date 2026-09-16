@@ -19,9 +19,4 @@ export const DEFAULT_WORDS: string[] = [
   'literacy',
   'miniature',
   'restaurant',
-  'compel',
-  'courageous',
-  'delete',
-  'patriot',
-  'righteousness',
 ];

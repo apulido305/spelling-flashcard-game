@@ -84,7 +84,7 @@ test('Setup: default list quick-start, custom paste, and Clear all work', async 
   await playBtn.click();
   await page.waitForSelector('.play-definition', { timeout: 5000 });
   const progress = await page.locator('.play-progress').innerText();
-  assert(progress.includes('24 left in queue'), `Expected 25-word default list, got: ${progress}`);
+  assert(progress.includes('19 left in queue'), `Expected 20-word default list, got: ${progress}`);
 
   // Back to Setup via New List, then test paste + Clear.
   await page.click('button:has-text("New List")');
