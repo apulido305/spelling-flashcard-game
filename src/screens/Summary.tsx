@@ -24,9 +24,7 @@ export default function Summary({
   return (
     <>
       <h1>{isQuiz ? 'Test Complete!' : 'Session Complete!'}</h1>
-      <div className="summary-score">
-        {isQuiz ? `${score} / ${totalWords} correct` : `${score} points`}
-      </div>
+      {isQuiz && <div className="summary-score">{score} / {totalWords} correct</div>}
 
       {newlyMastered.length > 0 && (
         <p className="newly-mastered">
