@@ -98,7 +98,7 @@ test('Setup: default list quick-start, custom paste, and Clear all work', async 
   await context.close();
 });
 
-test('Play loop: correct/incorrect scoring and requeue-on-miss, hint after 2 misses', async (browser) => {
+test('Play loop: correct/incorrect feedback, requeue-on-miss, hint after 2 misses', async (browser) => {
   const { context, page, pageErrors } = await newPage(browser);
   const words = ['cat', 'dog', 'house', 'tree', 'water'];
   await startGame(page, words);
@@ -129,7 +129,7 @@ test('Play loop: correct/incorrect scoring and requeue-on-miss, hint after 2 mis
       await page.click('button[type="submit"]');
       await page.waitForSelector('.feedback.correct', { timeout: 3000 });
       const feedbackText = await page.locator('.feedback').innerText();
-      assert(feedbackText.includes('+5'), `Expected +5 after 2 misses, got: ${feedbackText}`);
+      assert(feedbackText === 'Correct!', `Expected plain "Correct!" (no point scoring), got: ${feedbackText}`);
       await page.waitForSelector('.feedback', { state: 'detached', timeout: 3000 }).catch(() => {});
     } else {
       await answerCorrectly(page, word);
@@ -141,34 +141,36 @@ test('Play loop: correct/incorrect scoring and requeue-on-miss, hint after 2 mis
   await context.close();
 });
 
-test('Spell it costs points and flags review; Sound it out stays free', async (browser) => {
+test('Spell it flags review, Sound it out does not - no point scoring in practice mode', async (browser) => {
   const { context, page, pageErrors } = await newPage(browser);
   await startGame(page, ['cat', 'dog', 'house']);
 
-  // Word 1: Sound it out (phonetic) - should stay full price, no review flag.
+  // Word 1: Sound it out (phonetic) - no review flag, plain "Correct!".
   const word1 = await lastSpoken(page);
   await page.click('button:has-text("Sound it out")');
   await page.waitForTimeout(150);
   const noteAfterSoundOut = await page.locator('.help-used-note').isVisible().catch(() => false);
-  assert(!noteAfterSoundOut, 'Sound it out must not trigger the help-used penalty note');
+  assert(!noteAfterSoundOut, 'Sound it out must not trigger the help-used note');
   let { feedbackText } = await answerCorrectly(page, word1);
-  assert(feedbackText.includes('+10'), `Expected +10 (Sound it out is free) for "${word1}", got: ${feedbackText}`);
+  assert(feedbackText === 'Correct!', `Expected plain "Correct!" (no point scoring) for "${word1}", got: ${feedbackText}`);
 
-  // Word 2: Spell it - should still cost 5 points and show the note.
+  // Word 2: Spell it - still flags the word for review, same plain feedback.
   const word2 = await lastSpoken(page);
   await page.click('button:has-text("Spell it")');
   await page.waitForTimeout(150);
   const noteAfterSpellIt = await page.locator('.help-used-note').isVisible();
-  assert(noteAfterSpellIt, 'Spell it should trigger the help-used penalty note');
+  assert(noteAfterSpellIt, 'Spell it should trigger the help-used note');
   ({ feedbackText } = await answerCorrectly(page, word2));
-  assert(feedbackText.includes('+5'), `Expected +5 (Spell it costs) for "${word2}", got: ${feedbackText}`);
+  assert(feedbackText === 'Correct!', `Expected plain "Correct!" (no point scoring) for "${word2}", got: ${feedbackText}`);
 
-  // Word 3: no help - full price, finishes the queue.
+  // Word 3: no help, finishes the queue.
   await answerCorrectly(page);
 
   await page.waitForSelector('text=Session Complete!', { timeout: 5000 });
-  const finalScore = await page.locator('.summary-score').innerText();
-  assert(finalScore.includes('25'), `Expected score 25 (10+5+10), got: ${finalScore}`);
+  assert(
+    (await page.locator('.summary-score').count()) === 0,
+    'Practice mode Summary should not show a score/points line'
+  );
   const missedListItems = await page.locator('.missed-list li').allInnerTexts();
   assert(
     missedListItems.length === 1 && missedListItems[0].toLowerCase() === word2.toLowerCase(),
@@ -219,20 +221,26 @@ test('Session completion, Play Again, Restart, and New List all work', async (br
   await answerCorrectly(page);
   await page.waitForSelector('text=Session Complete!', { timeout: 5000 });
 
-  // Play Again resets score and reshuffles the same list.
+  // Play Again reshuffles the same list back to the start.
   await page.click('button:has-text("Play Again")');
   await page.waitForSelector('.play-definition', { timeout: 5000 });
   let progress = await page.locator('.play-progress').innerText();
-  assert(progress.includes('Score: 0') && progress.includes('Word 1'), `Expected fresh state after Play Again, got: ${progress}`);
+  assert(
+    progress.includes('Word 1') && progress.includes('1 left in queue'),
+    `Expected fresh state after Play Again, got: ${progress}`
+  );
 
-  // Build up some progress, then Restart should zero it out without leaving Play.
+  // Build up some progress, then Restart should reset it without leaving Play.
   await answerCorrectly(page);
   progress = await page.locator('.play-progress').innerText();
-  assert(progress.includes('Score: 10'), `Expected Score: 10 before restart, got: ${progress}`);
+  assert(progress.includes('Word 2'), `Expected progress to have advanced before restart, got: ${progress}`);
   await page.click('button:has-text("Restart")');
   await page.waitForTimeout(200);
   progress = await page.locator('.play-progress').innerText();
-  assert(progress.includes('Score: 0') && progress.includes('Word 1'), `Expected fresh state after Restart, got: ${progress}`);
+  assert(
+    progress.includes('Word 1') && progress.includes('1 left in queue'),
+    `Expected fresh state after Restart, got: ${progress}`
+  );
 
   // New List returns to a cleared Setup screen.
   await page.click('button:has-text("New List")');

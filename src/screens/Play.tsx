@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { GameState } from '../types';
-import { HINT_AFTER_MISSES, hintText, requeue, scoreForAnswer } from '../lib/gameLogic';
+import { HINT_AFTER_MISSES, hintText, requeue } from '../lib/gameLogic';
 import { classifyMistake } from '../lib/spellDiff';
 import {
   getLastSpeechDebugInfo,
@@ -55,7 +55,6 @@ export default function Play({ game, sentences, onGameChange, onFinish, onRestar
   const speechSupported = isSpeechSupported();
   const missCount = currentWord ? missCounts[currentWord] ?? 0 : 0;
   const showHint = !isQuiz && missCount >= HINT_AFTER_MISSES;
-  const gotHelpThisWord = currentWord ? !!usedHelp[currentWord] || missCount > 0 : false;
 
   useEffect(() => {
     if (currentWord) speakWord(currentWord, sentences[currentWord]);
@@ -82,14 +81,14 @@ export default function Play({ game, sentences, onGameChange, onFinish, onRestar
     if (!currentWord) return;
     // Unlike Spell it (which names every letter outright), sounding a word
     // out phonetically is a spelling strategy we want to encourage, not a
-    // hint that gives the answer away — no score/review-list penalty.
+    // hint that gives the answer away — no review-list penalty.
     soundOutWord(currentWord);
   }
 
   function handleRestartClick() {
     const message = isQuiz
       ? 'Restart this test? Your current progress will be lost.'
-      : 'Restart this word list? Your current score and progress will be lost.';
+      : 'Restart this word list? Your current progress will be lost.';
     if (window.confirm(message)) onRestart();
   }
 
@@ -150,10 +149,8 @@ export default function Play({ game, sentences, onGameChange, onFinish, onRestar
     }
 
     if (isCorrect) {
-      const points = scoreForAnswer(gotHelpThisWord);
-      const newScore = score + points;
       const newWordsCompleted = wordsCompleted + 1;
-      setFeedback({ type: 'correct', text: `Correct! +${points} points` });
+      setFeedback({ type: 'correct', text: 'Correct!' });
 
       const restQueue = queue.slice(1);
       setTimeout(() => {
@@ -161,12 +158,11 @@ export default function Play({ game, sentences, onGameChange, onFinish, onRestar
         setFeedback(null);
         setBusy(false);
         if (restQueue.length === 0) {
-          onFinish(newScore, reviewWords(missCounts, usedHelp));
+          onFinish(score, reviewWords(missCounts, usedHelp));
         } else {
           onGameChange({
             ...game,
             queue: restQueue,
-            score: newScore,
             wordsCompleted: newWordsCompleted,
           });
         }
@@ -203,7 +199,7 @@ export default function Play({ game, sentences, onGameChange, onFinish, onRestar
     <>
       <div className="play-progress">
         <span>Word {wordsCompleted + 1}</span>
-        <span>{isQuiz ? `Correct: ${score}` : `Score: ${score}`}</span>
+        {isQuiz && <span>Correct: {score}</span>}
         <span>{queue.length - 1} left in queue</span>
       </div>
 
@@ -250,7 +246,7 @@ export default function Play({ game, sentences, onGameChange, onFinish, onRestar
           {showHint && <p className="hint-text">Hint: {hintText(currentWord)}</p>}
           {!isQuiz && usedHelp[currentWord] && (
             <p className="help-used-note">
-              Spell it used — this word is worth 5 points and goes on the review list.
+              Spell it used — this word goes on the review list.
             </p>
           )}
         </div>

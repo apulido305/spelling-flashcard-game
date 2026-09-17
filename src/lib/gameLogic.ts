@@ -30,10 +30,6 @@ export function requeue(remainingQueue: string[], word: string): string[] {
   return next;
 }
 
-export function scoreForAnswer(wasEverMissedThisRound: boolean): number {
-  return wasEverMissedThisRound ? 5 : 10;
-}
-
 export const HINT_AFTER_MISSES = 2;
 
 export function hintText(word: string): string {
