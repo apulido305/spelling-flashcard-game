@@ -302,6 +302,7 @@ export default function Play({ game, sentences, onGameChange, onFinish, onRestar
                 `isHighQuality: ${debugInfo.isHighQuality}`,
                 `rate: ${debugInfo.rate}`,
                 `voiceCount: ${debugInfo.voiceCount}`,
+                `topCandidates:\n  ${debugInfo.topCandidates.join('\n  ')}`,
                 `calledAt: ${debugInfo.calledAt}`,
               ].join('\n')
             : 'No speech triggered yet.'}

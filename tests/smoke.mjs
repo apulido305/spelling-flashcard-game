@@ -758,6 +758,79 @@ test('Accessibility settings: rate multiplier never touches high-quality voices,
   await context.close();
 });
 
+test('Voice auto-pick: US accent first, then best quality tier; never novelty or Eloquence voices', async (browser) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on('pageerror', (err) => pageErrors.push(String(err)));
+
+  await page.addInitScript(() => {
+    const voiceValues = new WeakMap();
+    Object.defineProperty(SpeechSynthesisUtterance.prototype, 'voice', {
+      get() {
+        return voiceValues.get(this) ?? null;
+      },
+      set(v) {
+        voiceValues.set(this, v);
+      },
+      configurable: true,
+    });
+
+    const v = (name, voiceURI, lang) => ({ name, voiceURI, lang, localService: true });
+    // Shaped like a real iPad's list with no US Enhanced/Premium voice
+    // downloaded - the case where an Enhanced British/Indian voice used to
+    // win over the standard US voice.
+    window.__voices = [
+      v('Bahh', 'com.apple.speech.synthesis.voice.Bahh', 'en-US'),
+      v('Eddy (English (US))', 'com.apple.voice.super-compact.en-US.Eddy', 'en-US'),
+      v('Fred', 'com.apple.speech.synthesis.voice.Fred', 'en-US'),
+      v('Daniel (Enhanced)', 'com.apple.voice.enhanced.en-GB.Daniel', 'en-GB'),
+      v('Rishi (Enhanced)', 'com.apple.voice.enhanced.en-IN.Rishi', 'en-IN'),
+      v('Aaron', 'com.apple.voice.compact.en-US.Aaron', 'en-US'),
+      v('Samantha', 'com.apple.voice.compact.en-US.Samantha', 'en-US'),
+      v('Amélie', 'com.apple.voice.enhanced.fr-CA.Amelie', 'fr-CA'),
+    ];
+    window.__spoken = [];
+    window.speechSynthesis.getVoices = () => window.__voices;
+    window.speechSynthesis.speak = (utterance) => {
+      window.__spoken.push({ voice: utterance.voice?.name ?? null, lang: utterance.lang });
+    };
+  });
+
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('text=Ready to practice', { timeout: 10000 });
+  await page.click('summary:has-text("Settings")');
+
+  async function previewVoice() {
+    await page.click('button:has-text("Preview")');
+    await page.waitForTimeout(150);
+    return page.evaluate(() => window.__spoken[window.__spoken.length - 1]);
+  }
+
+  let last = await previewVoice();
+  assert(
+    last.voice === 'Samantha' && last.lang === 'en-US',
+    `Expected standard US Samantha over Enhanced non-US voices, got: ${JSON.stringify(last)}`
+  );
+
+  // With US Enhanced and Premium voices installed, Premium wins.
+  await page.evaluate(() => {
+    const v = (name, voiceURI) => ({ name, voiceURI, lang: 'en-US', localService: true });
+    window.__voices = [
+      ...window.__voices,
+      v('Evan (Enhanced)', 'com.apple.voice.enhanced.en-US.Evan'),
+      v('Ava (Enhanced)', 'com.apple.voice.enhanced.en-US.Ava'),
+      v('Ava (Premium)', 'com.apple.voice.premium.en-US.Ava'),
+    ];
+    window.speechSynthesis.dispatchEvent(new Event('voiceschanged'));
+  });
+  last = await previewVoice();
+  assert(last.voice === 'Ava (Premium)', `Expected Ava (Premium), got: ${JSON.stringify(last)}`);
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 test('Persistent Home button: hidden on Setup, present on Play/Summary, and recovers a corrupted session', async (browser) => {
   const { context, page, pageErrors } = await newPage(browser);
 

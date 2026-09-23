@@ -38,6 +38,18 @@ function isNoveltyVoice(voice: SpeechSynthesisVoice): boolean {
   return NOVELTY_VOICE_NAMES.some((novelty) => name === novelty || name.startsWith(`${novelty} `));
 }
 
+// Apple's Eloquence voices (Eddy, Flo, Grandma, Grandpa, Reed, Rocko,
+// Sandy, Shelley) are a robotic legacy engine that mangles many words.
+// Some iOS versions don't put "eloquence" in the voiceURI, so match by name
+// too - names are either bare ("Eddy") or localized ("Eddy (English (US))").
+const ELOQUENCE_VOICE_NAMES = ['eddy', 'flo', 'grandma', 'grandpa', 'reed', 'rocko', 'sandy', 'shelley'];
+
+function isEloquenceVoice(voice: SpeechSynthesisVoice): boolean {
+  if (/eloquence/.test(voiceHaystack(voice))) return true;
+  const name = voice.name.toLowerCase();
+  return ELOQUENCE_VOICE_NAMES.some((eloquence) => name === eloquence || name.startsWith(`${eloquence} `));
+}
+
 // iOS Premium/Enhanced voices distort badly ("croaking") when spoken at anything
 // other than their native rate — only the older standard/compact voices tolerate
 // being slowed down cleanly.
@@ -45,20 +57,59 @@ function isHighQualityVoice(voice: SpeechSynthesisVoice): boolean {
   return /premium|enhanced|natural|neural/.test(voiceHaystack(voice));
 }
 
-function scoreVoice(voice: SpeechSynthesisVoice): number {
+// Normalizes "en_US" (Android) and "en-us" to "en-US".
+function voiceLang(voice: SpeechSynthesisVoice): string {
+  const [language = '', region = ''] = voice.lang.replace('_', '-').split('-');
+  return region ? `${language.toLowerCase()}-${region.toUpperCase()}` : language.toLowerCase();
+}
+
+// Accent comes first: these are American spelling lists, and an Enhanced
+// British/Indian/Australian voice was outranking the standard US voice
+// whenever no US Enhanced voice was installed (e.g. after an iPadOS update
+// drops downloaded voices) - words came out in an accent the kids couldn't
+// always make out.
+function localeRank(voice: SpeechSynthesisVoice): number {
+  const lang = voiceLang(voice);
+  if (lang === 'en-US') return 2;
+  if (lang.startsWith('en')) return 1;
+  return 0;
+}
+
+// Apple's tiers, best to worst: Premium (neural) > Enhanced > default >
+// Compact. Edge/Chrome "Natural"/"Neural" voices rank with Premium.
+function qualityTier(voice: SpeechSynthesisVoice): number {
   const haystack = voiceHaystack(voice);
-  let score = 0;
-  if (/enhanced/.test(haystack)) score += 12;
-  if (/premium|natural|neural/.test(haystack)) score += 10;
-  if (/compact/.test(haystack)) score -= 5; // iOS's lowest-quality tier
-  if (/eloquence/.test(haystack)) score -= 10; // notably robotic legacy engine
-  if (voice.lang === 'en-US') score += 3;
-  else if (voice.lang.startsWith('en')) score += 1;
-  // Slight edge to on-device voices over an equally-scored cloud voice — a
-  // cloud voice needs network to synthesize speech, which risks a session
-  // going silent on a flaky school Wi-Fi connection.
-  if (voice.localService) score += 1;
-  return score;
+  if (/premium|natural|neural/.test(haystack)) return 3;
+  if (/enhanced/.test(haystack)) return 2;
+  if (/compact/.test(haystack)) return 0;
+  return 1;
+}
+
+// Within a tier, Apple's clearest US voices, best first. Anything else
+// ranks after these.
+const PREFERRED_VOICE_NAMES = ['ava', 'samantha', 'zoe', 'evan', 'nathan', 'allison', 'susan', 'tom', 'joelle', 'noelle', 'alex'];
+
+function preferredNameRank(voice: SpeechSynthesisVoice): number {
+  const name = voice.name.toLowerCase();
+  const index = PREFERRED_VOICE_NAMES.findIndex((preferred) => name === preferred || name.startsWith(`${preferred} `));
+  return index === -1 ? PREFERRED_VOICE_NAMES.length : index;
+}
+
+function compareVoices(a: SpeechSynthesisVoice, b: SpeechSynthesisVoice): number {
+  return (
+    localeRank(b) - localeRank(a) ||
+    qualityTier(b) - qualityTier(a) ||
+    preferredNameRank(a) - preferredNameRank(b) ||
+    // On-device before cloud: a cloud voice needs network to synthesize
+    // speech, which risks a session going silent on flaky school Wi-Fi.
+    Number(b.localService) - Number(a.localService)
+  );
+}
+
+function rankVoices(): SpeechSynthesisVoice[] {
+  const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
+  const usable = voices.filter((v) => !isNoveltyVoice(v) && !isEloquenceVoice(v));
+  return [...(usable.length ? usable : voices)].sort(compareVoices);
 }
 
 // No manual voice override: letting a user pick a specific non-default voice
@@ -67,14 +118,7 @@ function scoreVoice(voice: SpeechSynthesisVoice): number {
 // voice other than whatever the auto-pick lands on came out garbled. Rather
 // than chase that further blind, auto-pick is now the only path.
 function pickBestVoice(): SpeechSynthesisVoice | undefined {
-  const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
-  if (voices.length === 0) return undefined;
-
-  const englishVoices = voices.filter((v) => v.lang.startsWith('en') && !isNoveltyVoice(v));
-  const pool = englishVoices.length ? englishVoices : voices.filter((v) => !isNoveltyVoice(v));
-  const finalPool = pool.length ? pool : voices;
-
-  return [...finalPool].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0];
+  return rankVoices()[0];
 }
 
 export interface SpeechDebugInfo {
@@ -84,6 +128,7 @@ export interface SpeechDebugInfo {
   isHighQuality: boolean | null;
   rate: number;
   voiceCount: number;
+  topCandidates: string[];
   calledAt: string;
 }
 
@@ -112,7 +157,12 @@ function speakText(text: string, standardVoiceRate: number) {
         ? 1
         : standardVoiceRate * rateMultiplier
       : standardVoiceRate * rateMultiplier;
-    if (voice) utterance.voice = voice;
+    if (voice) {
+      utterance.voice = voice;
+      // iOS Safari can ignore .voice (and read with the system default)
+      // unless .lang matches it.
+      utterance.lang = voice.lang;
+    }
     utterance.rate = rate;
 
     lastDebugInfo = {
@@ -122,6 +172,9 @@ function speakText(text: string, standardVoiceRate: number) {
       isHighQuality: voice ? isHighQualityVoice(voice) : null,
       rate,
       voiceCount: (cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices()).length,
+      topCandidates: rankVoices()
+        .slice(0, 5)
+        .map((v) => `${v.name} [${v.lang}] ${v.voiceURI}`),
       calledAt: new Date().toLocaleTimeString(),
     };
 
