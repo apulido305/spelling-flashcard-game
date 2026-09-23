@@ -803,6 +803,44 @@ test('Persistent Home button: hidden on Setup, present on Play/Summary, and reco
   await context.close();
 });
 
+test('Sessions saved by older versions (missing later-added fields) still load instead of white-screening', async (browser) => {
+  const { context, page, pageErrors } = await newPage(browser);
+
+  // Reported as a white screen on every browser that had visited the site
+  // before. Sessions persisted before 2026-09-10 have no `sentences` or
+  // `finalNewlyMastered`; loading one as-is threw on the first Play/Summary
+  // render, and since the session stays saved, every reload crashed again.
+  const oldSessions = {
+    play: {
+      screen: 'play',
+      setupText: 'cat\ndog',
+      words: ['cat', 'dog'],
+      game: { mode: 'practice', queue: ['cat', 'dog'], score: 0, missCounts: {}, wordsCompleted: 0 },
+      finalScore: 0,
+      finalMissed: [],
+    },
+    summary: {
+      screen: 'summary',
+      setupText: 'cat',
+      words: ['cat'],
+      game: { mode: 'practice', queue: [], score: 10, missCounts: {}, usedHelp: {}, wordsCompleted: 1 },
+      finalScore: 10,
+      finalMissed: [],
+    },
+  };
+
+  for (const [screen, session] of Object.entries(oldSessions)) {
+    await page.evaluate((s) => localStorage.setItem('spelling-flashcard:session', JSON.stringify(s)), session);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector(screen === 'play' ? '.play-definition' : 'text=Session Complete!', { timeout: 5000 });
+    await page.click('.home-button');
+    await page.waitForSelector('text=Ready to practice', { timeout: 5000 });
+  }
+
+  assert(pageErrors.length === 0, `Unexpected page errors: ${JSON.stringify(pageErrors)}`);
+  await context.close();
+});
+
 test('Stale cached index.html referencing a purged bundle self-recovers via one automatic reload', async (browser) => {
   const context = await browser.newContext();
   const page = await context.newPage();

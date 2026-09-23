@@ -36,6 +36,39 @@ function defaultSession(): SessionState {
   };
 }
 
+// Older deploys persisted sessions without fields added later (e.g.
+// `sentences` and `finalNewlyMastered`, both added 2026-09-10). Loading one of
+// those as-is crashed Play/Summary on first render - and since the broken
+// session stays in localStorage, every reload white-screened again. Fill in
+// anything missing so a session saved by any past version still loads.
+function loadSession(): SessionState {
+  const saved = loadJSON<Partial<SessionState> | null>(STORAGE_KEY, null);
+  if (!saved || typeof saved !== 'object') return defaultSession();
+  const session: SessionState = { ...defaultSession(), ...saved };
+  const game = session.game as Partial<GameState> | null;
+  session.game =
+    game && typeof game === 'object' && Array.isArray(game.queue)
+      ? {
+          mode: game.mode === 'quiz' ? 'quiz' : 'practice',
+          queue: game.queue,
+          score: game.score ?? 0,
+          missCounts: game.missCounts ?? {},
+          usedHelp: game.usedHelp ?? {},
+          wordsCompleted: game.wordsCompleted ?? 0,
+        }
+      : null;
+  if (!Array.isArray(session.words)) session.words = [];
+  if (!Array.isArray(session.finalMissed)) session.finalMissed = [];
+  if (!Array.isArray(session.finalNewlyMastered)) session.finalNewlyMastered = [];
+  if (!session.sentences || typeof session.sentences !== 'object') session.sentences = {};
+  if (typeof session.setupText !== 'string') session.setupText = '';
+  return session;
+}
+
+export function clearSavedSession() {
+  clearJSON(STORAGE_KEY);
+}
+
 function freshGame(words: string[], mode: GameMode): GameState {
   const mastered = getMasteredSet(words);
   return {
@@ -49,9 +82,7 @@ function freshGame(words: string[], mode: GameMode): GameState {
 }
 
 export default function App() {
-  const [session, setSession] = useState<SessionState>(() =>
-    loadJSON(STORAGE_KEY, defaultSession())
-  );
+  const [session, setSession] = useState<SessionState>(loadSession);
   const [settings, setSettings] = useState(() => getAccessibilitySettings());
 
   useEffect(() => {
