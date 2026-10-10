@@ -19,7 +19,7 @@ jobs:
       - name: Start preview server
         run: |
           nohup npx vite preview --port 4173 --strictPort > preview.log 2>&1 &
-          timeout 30 bash -c 'until curl -sf http://localhost:4173/spelling-flashcard-game/ >/dev/null; do sleep 1; done'
+          timeout 30 bash -c 'until curl -sf http://localhost:4173/spelling/ >/dev/null; do sleep 1; done'
       - run: node tests/smoke.mjs
         env:
-          SMOKE_URL: http://localhost:4173/spelling-flashcard-game/
+          SMOKE_URL: http://localhost:4173/spelling/
